@@ -1,0 +1,22 @@
+# Dependency directories (Massive folders that shouldn't be tracked)
+**/node_modules/
+**/.expo/
+**/dist/
+
+# Local configuration secrets and environment variables
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files (Mac and Windows junk files)
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+.vscode/
+.idea/
