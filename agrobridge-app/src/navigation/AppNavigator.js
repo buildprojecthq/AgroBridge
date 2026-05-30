@@ -12,14 +12,16 @@ import InboxScreen from '../screens/farmer/InboxScreen';
 import MarketplaceScreen from '../screens/buyer/MarketplaceScreen';
 import ChatScreen from '../screens/ChatScreen';
 import CheckoutScreen from '../screens/buyer/CheckoutScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import LanguageSelectionScreen from '../screens/LanguageSelectionScreen';
 
 const Stack = createStackNavigator();
 
 export default function AppNavigator() {
-  const { user, userRole, loading } = useAuth();
+  const { user, userRole, loading, language, languageChecked } = useAuth();
 
   // Show a premium loading spinner while Firebase checks the user's session and database role
-  if (loading) {
+  if (loading || !languageChecked) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
         <ActivityIndicator size="large" color="#4CAF50" />
@@ -29,10 +31,11 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={!language ? "LanguageSelection" : "Login"}>
         {user === null ? (
           // 1. AUTHENTICATION FLOW (User is not logged in)
           <>
+            <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
           </>
@@ -43,6 +46,8 @@ export default function AppNavigator() {
             <Stack.Screen name="CropUpload" component={CropUploadScreen} />
             <Stack.Screen name="Inbox" component={InboxScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
           </>
         ) : userRole === 'BUYER' ? (
           // 3. BUYER FLOW (Authenticated as Buyer)
@@ -50,6 +55,8 @@ export default function AppNavigator() {
             <Stack.Screen name="BuyerHome" component={MarketplaceScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Checkout" component={CheckoutScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
           </>
         ) : (
           // 4. FALLBACK (Authenticated but Firestore registration profile hasn't loaded or role is missing)

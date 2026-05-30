@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "108853026140",
+    "project_id": "agroapp-backend-e5294",
+    "storage_bucket": "agroapp-backend-e5294.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:108853026140:android:4fb2b64ec4e5cb368b3599",
+        "android_client_info": {
+          "package_name": "Agro.bridge"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5_26LtEv0l41CgBxg-nHH8ZQDzjcfIg4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

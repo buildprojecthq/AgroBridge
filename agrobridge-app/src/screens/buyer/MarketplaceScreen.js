@@ -1,14 +1,16 @@
-// agrobridge-app/src/screens/buyer/MarketplaceScreen.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { Text, View, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { collection, query, where, onSnapshot } from '@react-native-firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export default function MarketplaceScreen({ navigation }) {
   const { logout } = useAuth();
   const [crops, setCrops] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { t } = useTranslation();
 
   useEffect(() => {
     // 1. Create a query to only fetch crops that are currently 'AVAILABLE'
@@ -36,20 +38,20 @@ export default function MarketplaceScreen({ navigation }) {
 
   // 3. Design the UI card for each crop item
   const renderCropItem = ({ item }) => (
-    <View style={styles.cropCard}>
-      <Image source={{ uri: item.imageUrl }} style={styles.cropImage} />
-      <View style={styles.cardContent}>
-        <Text style={styles.cropTitle}>{item.cropType}</Text>
-        <Text style={styles.farmerName}>Sold by: Farmer {item.farmerId.substring(0, 5)}...</Text>
+    <View className="bg-white rounded-3xl mb-5 overflow-hidden shadow-sm shadow-black/10 border border-gray-100">
+      <Image source={{ uri: item.imageUrl }} className="w-full h-40 bg-gray-200" />
+      <View className="p-5">
+        <Text className="text-xl font-bold text-gray-800 mb-1" style={{ fontFamily: 'NotoSans_800ExtraBold' }}>{item.cropType}</Text>
+        <Text className="text-sm text-gray-500 mb-4" style={{ fontFamily: 'NotoSans_500Medium' }}>{t('Sold by')}: Farmer {item.farmerId.substring(0, 5)}...</Text>
 
-        <View style={styles.detailsRow}>
-          <Text style={styles.priceText}>₹{item.pricePerKg} / Kg</Text>
-          <Text style={styles.quantityText}>{item.quantityKg} Kg available</Text>
+        <View className="flex-row justify-between mb-4 pb-4 border-b border-gray-100">
+          <Text className="text-lg font-bold text-[#029a43]" style={{ fontFamily: 'NotoSans_700Bold' }}>₹{item.pricePerKg} / Kg</Text>
+          <Text className="text-base text-gray-600" style={{ fontFamily: 'NotoSans_600SemiBold' }}>{item.quantityKg} Kg {t('available')}</Text>
         </View>
 
-        <View style={styles.actionRow}>
+        <View className="flex-row justify-between space-x-3">
           <TouchableOpacity 
-            style={styles.chatButton} 
+            className="flex-1 bg-blue-50 py-3 rounded-xl items-center flex-row justify-center border border-blue-100" 
             onPress={() => navigation.navigate('Chat', {
               cropId: item.id,
               cropName: item.cropType,
@@ -57,11 +59,12 @@ export default function MarketplaceScreen({ navigation }) {
               targetUserName: `Farmer ${item.farmerId.substring(0, 5)}`
             })}
           >
-            <Text style={styles.chatButtonText}> Chat</Text>
+            <Ionicons name="chatbubble-outline" size={18} color="#2563eb" style={{ marginRight: 6 }} />
+            <Text className="text-blue-600 font-bold" style={{ fontFamily: 'NotoSans_700Bold' }}>{t('Chat')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.buyButton} 
+            className="flex-1 bg-orange-500 py-3 rounded-xl items-center flex-row justify-center shadow-sm shadow-orange-500/30" 
             onPress={() => navigation.navigate('Checkout', {
               cropId: item.id,
               cropType: item.cropType,
@@ -70,7 +73,8 @@ export default function MarketplaceScreen({ navigation }) {
               farmerId: item.farmerId
             })}
           >
-            <Text style={styles.buyButtonText}> Buy Now</Text>
+            <Ionicons name="cart-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text className="text-white font-bold" style={{ fontFamily: 'NotoSans_700Bold' }}>{t('Buy Now')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -78,56 +82,56 @@ export default function MarketplaceScreen({ navigation }) {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>B2B Marketplace</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
+    <View className="flex-1 bg-slate-50">
+      {/* Header */}
+      <View className="flex-row justify-between items-center px-6 pt-16 pb-6 bg-white rounded-b-3xl shadow-sm shadow-black/5 z-10">
+        <View>
+          <Text className="text-gray-500 text-sm font-semibold mb-1" style={{ fontFamily: 'NotoSans_600SemiBold' }}>{t('Marketplace')}</Text>
+          <Text className="text-2xl font-bold text-gray-800" style={{ fontFamily: 'NotoSans_800ExtraBold' }}>{t('Buy Crops')}</Text>
+        </View>
+        <TouchableOpacity 
+          className="bg-gray-100 p-3 rounded-full" 
+          onPress={() => navigation.navigate('Profile')}
+        >
+          <Ionicons name="person" size={24} color="#4b5563" />
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#2E7D32" />
-          <Text style={{ marginTop: 10 }}>Loading Inventory...</Text>
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#029a43" />
+          <Text className="mt-4 text-gray-600 font-medium" style={{ fontFamily: 'NotoSans_500Medium' }}>Loading Inventory...</Text>
         </View>
       ) : crops.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>No crops available right now.</Text>
+        <View className="flex-1 justify-center items-center px-6">
+          <Ionicons name="leaf-outline" size={48} color="#d1d5db" className="mb-4" />
+          <Text className="text-gray-500 text-center font-medium mb-8" style={{ fontFamily: 'NotoSans_500Medium' }}>No crops available right now. Please check back later.</Text>
+          <TouchableOpacity 
+            className="bg-red-50 border border-red-100 p-4 rounded-xl items-center flex-row justify-center w-full" 
+            onPress={logout}
+          >
+            <Ionicons name="log-out-outline" size={20} color="#ef4444" style={{ marginRight: 6 }} />
+            <Text className="text-red-500 text-sm font-bold" style={{ fontFamily: 'NotoSans_700Bold' }}>Logout</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
           data={crops}
           keyExtractor={(item) => item.id}
           renderItem={renderCropItem}
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
+          ListFooterComponent={
+            <TouchableOpacity 
+              className="bg-red-50 border border-red-100 p-4 rounded-xl items-center flex-row justify-center mt-4 mb-8" 
+              onPress={logout}
+            >
+              <Ionicons name="log-out-outline" size={20} color="#ef4444" style={{ marginRight: 6 }} />
+              <Text className="text-red-500 text-sm font-bold" style={{ fontFamily: 'NotoSans_700Bold' }}>Logout</Text>
+            </TouchableOpacity>
+          }
         />
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 60, paddingBottom: 20, paddingHorizontal: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#333' },
-  logoutButton: { padding: 8, backgroundColor: '#eee', borderRadius: 6 },
-  logoutText: { color: '#333', fontWeight: 'bold' },
-  listContainer: { padding: 16 },
-  cropCard: { backgroundColor: '#fff', borderRadius: 12, marginBottom: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  cropImage: { width: '100%', height: 150, backgroundColor: '#e0e0e0' },
-  cardContent: { padding: 16 },
-  cropTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  farmerName: { fontSize: 14, color: '#666', marginBottom: 12 },
-  detailsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  priceText: { fontSize: 18, fontWeight: 'bold', color: '#2E7D32' },
-  quantityText: { fontSize: 16, color: '#555' },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  chatButton: { flex: 1, backgroundColor: '#E3F2FD', padding: 12, borderRadius: 8, alignItems: 'center', marginRight: 8 },
-  chatButtonText: { color: '#1976D2', fontWeight: 'bold', fontSize: 16 },
-  buyButton: { flex: 1, backgroundColor: '#FF9800', padding: 12, borderRadius: 8, alignItems: 'center', marginLeft: 8 },
-  buyButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  emptyText: { fontSize: 16, color: '#666', fontStyle: 'italic' }
-});

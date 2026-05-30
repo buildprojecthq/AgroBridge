@@ -1,8 +1,10 @@
 // agrobridge-app/src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { doc, getDoc } from '@react-native-firebase/firestore';
+import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 // Create the Context
 const AuthContext = createContext({});
@@ -13,9 +15,27 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null); // Will hold 'FARMER', 'BUYER', or 'ADMIN'
+  const [language, setLanguage] = useState(null); // Language selection
+  const [languageChecked, setLanguageChecked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { i18n } = useTranslation();
 
   useEffect(() => {
+    // Check for saved language first
+    const checkLanguage = async () => {
+      try {
+        const savedLang = await AsyncStorage.getItem('@app_language');
+        if (savedLang) {
+          setLanguage(savedLang);
+          i18n.changeLanguage(savedLang);
+        }
+      } catch (e) {
+        console.error("Failed to load language", e);
+      } finally {
+        setLanguageChecked(true);
+      }
+    };
+    checkLanguage();
     // Listen for Firebase Auth state changes (Login / Logout / Session persistence)
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
@@ -27,7 +47,7 @@ export const AuthProvider = ({ children }) => {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userDocSnap = await getDoc(userDocRef);
 
-          if (userDocSnap.exists()) {
+          if (userDocSnap.exists && userDocSnap.data()) {
             setUserRole(userDocSnap.data().role);
           } else {
             console.log("No user profile found in Firestore yet.");
@@ -59,8 +79,24 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   };
 
+  // Development bypass to easily login without OTP
+  const bypassLogin = (role = 'FARMER') => {
+    setUser({ uid: 'dev-bypass-123', email: 'dev@agrobridge.com', displayName: 'Developer', phoneNumber: '+919999999999' });
+    setUserRole(role);
+  };
+
+  const changeAppLanguage = async (langId) => {
+    setLanguage(langId);
+    i18n.changeLanguage(langId);
+    try {
+      await AsyncStorage.setItem('@app_language', langId);
+    } catch (e) {
+      console.error("Failed to save language", e);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userRole, loading, setUserRole, logout }}>
+    <AuthContext.Provider value={{ user, userRole, loading, language, languageChecked, setLanguage: changeAppLanguage, setUserRole, logout, bypassLogin }}>
       {children}
     </AuthContext.Provider>
   );

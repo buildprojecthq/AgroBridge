@@ -1,7 +1,7 @@
 // agrobridge-app/src/screens/buyer/CheckoutScreen.js
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { doc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 
