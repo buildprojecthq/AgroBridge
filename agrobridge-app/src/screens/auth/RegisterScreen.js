@@ -7,6 +7,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { auth, db } from '../../config/firebase';
+import * as Haptics from 'expo-haptics';
+import { View as MotiView } from 'moti';
 import { useAuth } from '../../context/AuthContext';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +36,7 @@ export default function RegisterScreen({ navigation }) {
   }, []);
 
   const handleRegister = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setErrors({});
     let newErrors = {};
 
@@ -57,6 +60,7 @@ export default function RegisterScreen({ navigation }) {
 
     setRegistering(true);
     try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
       const fullPhone = `+91${phone.trim()}`;
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const firebaseUser = userCredential.user;
@@ -93,6 +97,7 @@ export default function RegisterScreen({ navigation }) {
   };
 
   const handleGoogleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRegistering(true);
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -123,7 +128,6 @@ export default function RegisterScreen({ navigation }) {
     }
   };
 
-  // ── Reusable carved-glass input style ──────────────────────────────────────
   const inputContainerStyle = {
     backgroundColor: 'rgba(0,0,0,0.40)',
     borderWidth: 1,
@@ -139,16 +143,13 @@ export default function RegisterScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       className="flex-1"
     >
-      {/* ── Full-screen background ── */}
       <ImageBackground
         source={require('../../../assets/register-bg.avif')}
         style={{ flex: 1 }}
         resizeMode="cover"
       >
-        {/* Scrim overlay */}
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' }} />
 
-        {/* ── Language pill (top-right, no grid) ── */}
         <TouchableOpacity
           onPress={() => navigation.navigate('LanguageSelection')}
           style={{
@@ -166,15 +167,18 @@ export default function RegisterScreen({ navigation }) {
           <Ionicons name="language" size={20} color="#fff" />
         </TouchableOpacity>
 
-        {/* ── Flex-start column: typography and glass sheet are moved to the top ── */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start', paddingTop: 100, paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled"
         >
 
-          {/* Typography — floats above the sheet */}
-          <View style={{ paddingHorizontal: 32, paddingBottom: 28 }}>
+          <MotiView 
+            from={{ opacity: 0, translateY: -20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 600, delay: 100 }}
+            style={{ paddingHorizontal: 32, paddingBottom: 28 }}
+          >
             <Text
               style={{
                 fontSize: 36, fontWeight: 'bold', color: '#ffffff',
@@ -198,20 +202,21 @@ export default function RegisterScreen({ navigation }) {
             >
               {t('Join the AgroBridge Marketplace')}
             </Text>
-          </View>
+          </MotiView>
 
-          {/* ── Glass Card ── */}
-          <View style={{ marginHorizontal: 8, marginTop: 16 }}>
-          {/* The Mold */}
+          <MotiView 
+            from={{ translateY: 400, opacity: 0 }}
+            animate={{ translateY: 0, opacity: 1 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 90, delay: 300 }}
+            style={{ marginHorizontal: 8, marginTop: 16 }}
+          >
           <View style={{ borderRadius: 24, overflow: 'hidden' }}>
-            {/* L1 — Deep Refraction */}
             <BlurView
               intensity={90}
               tint="dark"
               style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
             />
 
-            {/* L2 — Liquid Gloss */}
             <LinearGradient
               colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.02)', 'rgba(0,0,0,0.5)']}
               start={{ x: 0, y: 0 }}
@@ -219,7 +224,6 @@ export default function RegisterScreen({ navigation }) {
               style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
             />
 
-            {/* L3 — Thick Glass Edge */}
             <View
               style={{
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -229,11 +233,9 @@ export default function RegisterScreen({ navigation }) {
               }}
             />
 
-            {/* L4 — Content (Inner view grows naturally, main screen scrolls) */}
             <View style={{ paddingHorizontal: 16, paddingTop: 32, paddingBottom: 32 }}>
 
               <View style={{ gap: 16 }}>
-                {/* Full Name */}
                 <View>
                   <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
                     {t('Full Name')}
@@ -248,7 +250,6 @@ export default function RegisterScreen({ navigation }) {
                   {errors.name ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>{errors.name}</Text> : null}
                 </View>
 
-                {/* Email */}
                 <View>
                   <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
                     {t('Email Address')}
@@ -265,7 +266,6 @@ export default function RegisterScreen({ navigation }) {
                   {errors.email ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>{errors.email}</Text> : null}
                 </View>
 
-                {/* Phone */}
                 <View>
                   <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
                     {t('Phone Number')}
@@ -277,7 +277,13 @@ export default function RegisterScreen({ navigation }) {
                       placeholder="1234567890"
                       placeholderTextColor="#6b7280"
                       value={phone}
-                      onChangeText={(val) => { setPhone(val); setErrors(p => ({ ...p, phone: '' })); }}
+                      onChangeText={(val) => { 
+                        setPhone(val); 
+                        setErrors(p => ({ ...p, phone: '' }));
+                        if (val.length === 10) {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }
+                      }}
                       keyboardType="number-pad"
                       maxLength={10}
                     />
@@ -285,7 +291,6 @@ export default function RegisterScreen({ navigation }) {
                   {errors.phone ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>{errors.phone}</Text> : null}
                 </View>
 
-                {/* Password */}
                 <View>
                   <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
                     {t('Password')}
@@ -388,7 +393,7 @@ export default function RegisterScreen({ navigation }) {
               </View>
             </View>
           </View>
-          </View>
+          </MotiView>
         </ScrollView>
       </ImageBackground>
     </KeyboardAvoidingView>

@@ -7,6 +7,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { auth } from '../../config/firebase';
+import * as Haptics from 'expo-haptics';
+import { View as MotiView } from 'moti';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import Svg, { Path } from 'react-native-svg';
 import { signInWithPhoneNumber, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
@@ -32,6 +34,7 @@ export default function LoginScreen({ navigation }) {
   }, []);
 
   const handleSendOTP = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setErrorMsg('');
     if (phone.trim().length !== 10) {
       setErrorMsg('Please enter exactly 10 digits for your phone number.');
@@ -39,6 +42,9 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
+      // Simulate network delay for testing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       const fullPhone = `+91${phone.trim()}`;
       const confirmation = await signInWithPhoneNumber(auth, fullPhone);
       setConfirm(confirmation);
@@ -144,7 +150,12 @@ export default function LoginScreen({ navigation }) {
         <View style={{ flex: 1, justifyContent: 'flex-start', paddingTop: 100 }}>
 
           {/* Typography — floats above the sheet */}
-          <View style={{ paddingHorizontal: 32, paddingBottom: 28 }}>
+          <MotiView 
+            from={{ opacity: 0, translateY: -20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 600, delay: 100 }}
+            style={{ paddingHorizontal: 32, paddingBottom: 28 }}
+          >
             <Text
               style={{
                 fontSize: 36,
@@ -172,10 +183,15 @@ export default function LoginScreen({ navigation }) {
             >
               {t('Login to AgroBridge')}
             </Text>
-          </View>
+          </MotiView>
 
           {/* ── Glass Card ── */}
-          <View style={{ marginHorizontal: 8, marginTop: 16 }}>
+          <MotiView 
+            from={{ translateY: 400, opacity: 0 }}
+            animate={{ translateY: 0, opacity: 1 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 90, delay: 300 }}
+            style={{ marginHorizontal: 8, marginTop: 16 }}
+          >
           {/* The Mold — fully rounded, overflow hidden clips all layers */}
           <View
             style={{
@@ -239,7 +255,13 @@ export default function LoginScreen({ navigation }) {
                         placeholder="1234567890"
                         placeholderTextColor="#6b7280"
                         value={phone}
-                        onChangeText={(val) => { setPhone(val); setErrorMsg(''); }}
+                        onChangeText={(val) => { 
+                          setPhone(val); 
+                          setErrorMsg(''); 
+                          if (val.length === 10) {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          }
+                        }}
                         keyboardType="number-pad"
                         maxLength={10}
                       />
@@ -375,7 +397,7 @@ export default function LoginScreen({ navigation }) {
               </View>
             </View>
           </View>
-          </View>
+          </MotiView>
         </View>
       </ImageBackground>
     </KeyboardAvoidingView>

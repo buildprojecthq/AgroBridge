@@ -1,6 +1,7 @@
 // agrobridge-app/src/screens/LanguageSelectionScreen.js
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, FlatList, SafeAreaView, ImageBackground, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, ImageBackground, StyleSheet, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { BlurView } from 'expo-blur';
