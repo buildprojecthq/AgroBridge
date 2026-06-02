@@ -14,6 +14,10 @@ import {
   NotoSans_700Bold, 
   NotoSans_800ExtraBold 
 } from '@expo-google-fonts/noto-sans';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   let [fontsLoaded] = useFonts({
@@ -25,11 +29,7 @@ export default function App() {
   });
 
   if (!fontsLoaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#029a43" />
-      </View>
-    );
+    return null; // Don't show ActivityIndicator, let the native splash screen hold it
   }
 
   return (

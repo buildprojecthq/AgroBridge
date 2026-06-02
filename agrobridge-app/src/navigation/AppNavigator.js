@@ -9,24 +9,30 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import DashboardScreen from '../screens/farmer/DashboardScreen';
 import CropUploadScreen from '../screens/farmer/CropUploadScreen';
 import InboxScreen from '../screens/farmer/InboxScreen';
-import MarketplaceScreen from '../screens/buyer/MarketplaceScreen';
+import BuyerDashboard from '../screens/buyer/BuyerDashboard';
+import CommodityDetailScreen from '../screens/buyer/CommodityDetailScreen';
 import ChatScreen from '../screens/ChatScreen';
 import CheckoutScreen from '../screens/buyer/CheckoutScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import LanguageSelectionScreen from '../screens/LanguageSelectionScreen';
+
+import * as SplashScreen from 'expo-splash-screen';
 
 const Stack = createStackNavigator();
 
 export default function AppNavigator() {
   const { user, userRole, loading, language, languageChecked } = useAuth();
 
-  // Show a premium loading spinner while Firebase checks the user's session and database role
+  React.useEffect(() => {
+    if (!loading && languageChecked) {
+      // Hide the native splash screen only once auth and language are fully resolved
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loading, languageChecked]);
+
+  // Optionally keep a minimal fade/loading state for deep link transitions, but skip the flash
   if (loading || !languageChecked) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-      </View>
-    );
+    return null; // Don't show ActivityIndicator, let the native splash screen hold it
   }
 
   return (
@@ -52,7 +58,8 @@ export default function AppNavigator() {
         ) : userRole === 'BUYER' ? (
           // 3. BUYER FLOW (Authenticated as Buyer)
           <>
-            <Stack.Screen name="BuyerHome" component={MarketplaceScreen} />
+            <Stack.Screen name="BuyerHome" component={BuyerDashboard} />
+            <Stack.Screen name="CommodityDetail" component={CommodityDetailScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Checkout" component={CheckoutScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />

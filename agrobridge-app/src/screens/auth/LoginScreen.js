@@ -121,7 +121,7 @@ export default function LoginScreen({ navigation }) {
     >
       {/* ── Full-screen background ── */}
       <ImageBackground
-        source={require('../../../assets/login-bg.avif')}
+        source={require('../../../assets/login-bg.jpg')}
         style={{ flex: 1 }}
         resizeMode="cover"
       >
@@ -373,7 +373,7 @@ export default function LoginScreen({ navigation }) {
                   </Text>
                 </TouchableOpacity>
 
-                {__DEV__ && (
+                {true && (
                   <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.10)' }}>
                     <Text style={{ color: '#fff', fontWeight: '600', textAlign: 'center', fontSize: 11, marginBottom: 12, fontFamily: 'NotoSans_700Bold' }}>
                       DEVELOPMENT ONLY

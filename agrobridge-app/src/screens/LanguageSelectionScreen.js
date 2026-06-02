@@ -111,14 +111,15 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                       overflow: 'hidden', // Clips the BlurView and gradient
                     }}
                   >
-                    {/* Glassmorphism Layers */}
+                    {/* Glassmorphism Layers (Adjust these for the 'foggy' effect) */}
                     <BlurView
-                      intensity={90}
-                      tint="dark"
+                      intensity={120} // Increase for more blur (0-100+)
+                      tint="light"    // Try 'light', 'dark', or 'default'
                       style={StyleSheet.absoluteFillObject}
                     />
                     <LinearGradient
-                      colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.05)']}
+                      // Adjust the alpha values (0.15, 0.05) to make it more or less "milky"
+                      colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.02)']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={StyleSheet.absoluteFillObject}
@@ -149,11 +150,11 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                         },
                         isSelected
                           ? {
-                              backgroundColor: 'rgba(22, 101, 52, 0.40)', // Brighter green tint for selected
-                            }
+                            backgroundColor: 'rgba(22, 101, 52, 0.40)', // Brighter green tint for selected
+                          }
                           : {
-                              backgroundColor: 'rgba(255,255,255,0.05)', // Much more translucent unselected state
-                            },
+                            backgroundColor: 'rgba(255,255,255,0.30)', // Much more translucent unselected state
+                          },
                       ]}
                     >
                       <View>
@@ -168,10 +169,11 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                         </Text>
                         <Text
                           style={{
-                            color: '#9ca3af',
+                            color: '#ffffff', // Changed from #9ca3af to match other text
                             fontSize: 13,
                             marginTop: 2,
                             fontFamily: 'NotoSans_500Medium',
+                            opacity: 0.9, // Slight opacity to still differentiate it slightly
                           }}
                         >
                           {item.name}

@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -15,7 +16,11 @@
     },
     "android": {
       "package": "Agro.bridge",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#2962ff"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -25,7 +30,8 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-google-signin/google-signin",
-      "expo-font"
+      "expo-font",
+      "expo-splash-screen"
     ]
   }
 }
