@@ -2,6 +2,7 @@
   "expo": {
     "name": "AgroBridge",
     "slug": "agrobridge-app",
+    "scheme": "agrobridge",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -11,12 +12,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.agrobridge.app",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "bundleIdentifier": "com.agrobridge.app"
     },
     "android": {
       "package": "Agro.bridge",
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#2962ff"
@@ -27,8 +26,6 @@
     },
     "plugins": [
       "expo-status-bar",
-      "@react-native-firebase/app",
-      "@react-native-firebase/auth",
       "@react-native-google-signin/google-signin",
       "expo-font",
       "expo-splash-screen"

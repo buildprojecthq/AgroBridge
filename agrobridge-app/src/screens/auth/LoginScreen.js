@@ -6,12 +6,11 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { auth } from '../../config/firebase';
+import { supabase } from '../../config/supabase';
 import * as Haptics from 'expo-haptics';
 import { View as MotiView } from 'moti';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+// import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import Svg, { Path } from 'react-native-svg';
-import { signInWithPhoneNumber, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
@@ -21,16 +20,16 @@ const { height } = Dimensions.get('window');
 export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
-  const [confirm, setConfirm] = useState(null);
+  const [confirm, setConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const { t } = useTranslation();
-  const { bypassLogin } = useAuth();
+  const { setUserRole } = useAuth();
 
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: '108853026140-2m2pshn6krpp7bnld031a0bb0krcm6ht.apps.googleusercontent.com',
-    });
+    // GoogleSignin.configure({
+    //   webClientId: '108853026140-2m2pshn6krpp7bnld031a0bb0krcm6ht.apps.googleusercontent.com',
+    // });
   }, []);
 
   const handleSendOTP = async () => {
@@ -42,27 +41,13 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      // Simulate network delay for testing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       const fullPhone = `+91${phone.trim()}`;
-      const confirmation = await signInWithPhoneNumber(auth, fullPhone);
-      setConfirm(confirmation);
+      const { error } = await supabase.auth.signInWithOtp({ phone: fullPhone });
+      if (error) throw error;
+      setConfirm(true);
     } catch (error) {
       console.error(error);
-      switch (error.code) {
-        case 'auth/too-many-requests':
-          setErrorMsg('Too many requests to this number. Please try again later.');
-          break;
-        case 'auth/invalid-phone-number':
-          setErrorMsg('The phone number entered is invalid.');
-          break;
-        case 'auth/network-request-failed':
-          setErrorMsg('Network error. Please check your internet connection.');
-          break;
-        default:
-          setErrorMsg('Could not send OTP. Please try again.');
-      }
+      setErrorMsg(error.message || 'Could not send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -76,23 +61,16 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await confirm.confirm(otp);
+      const fullPhone = `+91${phone.trim()}`;
+      const { data, error } = await supabase.auth.verifyOtp({ 
+        phone: fullPhone, 
+        token: otp, 
+        type: 'sms' 
+      });
+      if (error) throw error;
     } catch (error) {
       console.error(error);
-      switch (error.code) {
-        case 'auth/invalid-verification-code':
-          setErrorMsg('The code you entered is incorrect. Please try again.');
-          break;
-        case 'auth/code-expired':
-          setErrorMsg('This code has expired. Please go back and request a new one.');
-          setConfirm(null);
-          break;
-        case 'auth/network-request-failed':
-          setErrorMsg('Network error. Please check your internet connection.');
-          break;
-        default:
-          setErrorMsg('Invalid OTP code.');
-      }
+      setErrorMsg(error.message || 'Invalid OTP code.');
     } finally {
       setLoading(false);
     }
@@ -102,13 +80,34 @@ export default function LoginScreen({ navigation }) {
     setErrorMsg('');
     setLoading(true);
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const { idToken } = await GoogleSignin.signIn();
-      const googleCredential = GoogleAuthProvider.credential(idToken);
-      await signInWithCredential(auth, googleCredential);
+      alert("Google Sign-In requires a custom native build. Please use Guest Login or Phone OTP to test the app in Expo Go!");
     } catch (error) {
       console.error(error);
       setErrorMsg(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestSignIn = async (guestRole) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+      
+      if (data.user) {
+        const { error: dbError } = await supabase.from('users').upsert({
+          id: data.user.id,
+          role: guestRole,
+        });
+        if (dbError) throw dbError;
+        setUserRole(guestRole);
+      }
+    } catch (error) {
+      console.error(error);
+      setErrorMsg("Failed to sign in as guest.");
     } finally {
       setLoading(false);
     }
@@ -163,7 +162,7 @@ export default function LoginScreen({ navigation }) {
                 color: '#ffffff',
                 letterSpacing: -0.5,
                 marginBottom: 8,
-                fontFamily: 'NotoSans_800ExtraBold',
+                fontFamily: 'PlusJakartaSans_800ExtraBold',
                 textShadowColor: 'rgba(0,0,0,0.6)',
                 textShadowOffset: { width: 0, height: 2 },
                 textShadowRadius: 8,
@@ -175,7 +174,7 @@ export default function LoginScreen({ navigation }) {
               style={{
                 fontSize: 18,
                 color: '#d1d5db',
-                fontFamily: 'NotoSans_500Medium',
+                fontFamily: 'PlusJakartaSans_500Medium',
                 textShadowColor: 'rgba(0,0,0,0.5)',
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 4,
@@ -235,7 +234,7 @@ export default function LoginScreen({ navigation }) {
                   <View>
                     {/* Phone input */}
                     <Text
-                      style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}
+                      style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}
                     >
                       {t('Phone Number')}
                     </Text>
@@ -247,11 +246,11 @@ export default function LoginScreen({ navigation }) {
                         borderRadius: 16, height: 64, paddingHorizontal: 16,
                       }}
                     >
-                      <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginRight: 8, fontFamily: 'NotoSans_700Bold' }}>
+                      <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginRight: 8, fontFamily: 'PlusJakartaSans_700Bold' }}>
                         +91
                       </Text>
                       <TextInput
-                        style={{ flex: 1, fontSize: 16, color: '#fff', fontFamily: 'NotoSans_400Regular' }}
+                        style={{ flex: 1, fontSize: 16, color: '#fff', fontFamily: 'PlusJakartaSans_400Regular' }}
                         placeholder="1234567890"
                         placeholderTextColor="#6b7280"
                         value={phone}
@@ -268,7 +267,7 @@ export default function LoginScreen({ navigation }) {
                     </View>
 
                     {errorMsg ? (
-                      <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 8, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>
+                      <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 8, marginLeft: 4, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
                         {errorMsg}
                       </Text>
                     ) : null}
@@ -287,7 +286,7 @@ export default function LoginScreen({ navigation }) {
                     >
                       {loading
                         ? <ActivityIndicator color="#fff" />
-                        : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'NotoSans_700Bold' }}>{t('Send OTP')}</Text>
+                        : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'PlusJakartaSans_700Bold' }}>{t('Send OTP')}</Text>
                       }
                     </TouchableOpacity>
                   </View>
@@ -295,7 +294,7 @@ export default function LoginScreen({ navigation }) {
                   <View>
                     {/* OTP input */}
                     <Text
-                      style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}
+                      style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}
                     >
                       {t('Enter OTP Code')}
                     </Text>
@@ -305,7 +304,7 @@ export default function LoginScreen({ navigation }) {
                         fontSize: 16, color: '#fff', textAlign: 'center', letterSpacing: 10,
                         backgroundColor: 'rgba(0,0,0,0.40)',
                         borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
-                        fontFamily: 'NotoSans_700Bold',
+                        fontFamily: 'PlusJakartaSans_700Bold',
                       }}
                       placeholder="── ── ──"
                       placeholderTextColor="#6b7280"
@@ -316,7 +315,7 @@ export default function LoginScreen({ navigation }) {
                     />
 
                     {errorMsg ? (
-                      <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 8, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>
+                      <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 8, marginLeft: 4, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
                         {errorMsg}
                       </Text>
                     ) : null}
@@ -335,11 +334,11 @@ export default function LoginScreen({ navigation }) {
                     >
                       {loading
                         ? <ActivityIndicator color="#fff" />
-                        : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'NotoSans_700Bold' }}>{t('Verify & Login')}</Text>
+                        : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'PlusJakartaSans_700Bold' }}>{t('Verify & Login')}</Text>
                       }
                     </TouchableOpacity>
-                    <TouchableOpacity style={{ marginTop: 16, alignItems: 'center' }} onPress={() => setConfirm(null)}>
-                      <Text style={{ color: '#9ca3af', fontFamily: 'NotoSans_600SemiBold' }}>{t('Change Phone Number')}</Text>
+                    <TouchableOpacity style={{ marginTop: 16, alignItems: 'center' }} onPress={() => setConfirm(false)}>
+                      <Text style={{ color: '#9ca3af', fontFamily: 'PlusJakartaSans_600SemiBold' }}>{t('Change Phone Number')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -361,39 +360,59 @@ export default function LoginScreen({ navigation }) {
                     <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                     <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                   </Svg>
-                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8, fontFamily: 'NotoSans_700Bold' }}>
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8, fontFamily: 'PlusJakartaSans_700Bold' }}>
                     {t('Login with Google')}
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={{ marginTop: 8, alignItems: 'center' }} onPress={() => navigation.navigate('Register')}>
-                  <Text style={{ color: '#9ca3af', fontSize: 15, fontFamily: 'NotoSans_600SemiBold' }}>
+                  <Text style={{ color: '#9ca3af', fontSize: 15, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
                     {t("Don't have an account?")}{' '}
-                    <Text style={{ color: '#fff', fontFamily: 'NotoSans_800ExtraBold' }}>{t('Register here')}</Text>
+                    <Text style={{ color: '#fff', fontFamily: 'PlusJakartaSans_800ExtraBold' }}>{t('Register here')}</Text>
                   </Text>
                 </TouchableOpacity>
 
-                {true && (
-                  <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.10)' }}>
-                    <Text style={{ color: '#fff', fontWeight: '600', textAlign: 'center', fontSize: 11, marginBottom: 12, fontFamily: 'NotoSans_700Bold' }}>
-                      DEVELOPMENT ONLY
-                    </Text>
-                    <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-                      <TouchableOpacity
-                        style={{ backgroundColor: '#1e3a8a', borderWidth: 1, borderColor: '#1d4ed8', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, marginHorizontal: 4 }}
-                        onPress={() => bypassLogin('FARMER')}
-                      >
-                        <Text style={{ color: '#bfdbfe', fontSize: 12, fontWeight: 'bold', fontFamily: 'NotoSans_700Bold' }}>Bypass (Farmer)</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{ backgroundColor: '#581c87', borderWidth: 1, borderColor: '#7e22ce', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, marginHorizontal: 4 }}
-                        onPress={() => bypassLogin('BUYER')}
-                      >
-                        <Text style={{ color: '#e9d5ff', fontSize: 12, fontWeight: 'bold', fontFamily: 'NotoSans_700Bold' }}>Bypass (Buyer)</Text>
-                      </TouchableOpacity>
-                    </View>
+                {/* Guest Sign-In */}
+                <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.10)' }}>
+                  <Text style={{ color: '#d1d5db', fontSize: 13, textAlign: 'center', marginBottom: 12, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
+                    {t('Continue as Guest')}
+                  </Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <TouchableOpacity
+                      style={{
+                        flex: 1, flexDirection: 'row', height: 48, borderRadius: 16,
+                        alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: 'rgba(0,0,0,0.4)',
+                        borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+                        marginRight: 6
+                      }}
+                      onPress={() => handleGuestSignIn('GUEST_FARMER')}
+                      disabled={loading}
+                    >
+                      <Ionicons name="leaf-outline" size={16} color="#4ade80" />
+                      <Text style={{ color: '#d1d5db', fontSize: 13, fontWeight: 'bold', marginLeft: 6, fontFamily: 'PlusJakartaSans_700Bold' }}>
+                        {t('Farmer')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{
+                        flex: 1, flexDirection: 'row', height: 48, borderRadius: 16,
+                        alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: 'rgba(0,0,0,0.4)',
+                        borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+                        marginLeft: 6
+                      }}
+                      onPress={() => handleGuestSignIn('GUEST_BUYER')}
+                      disabled={loading}
+                    >
+                      <Ionicons name="storefront-outline" size={16} color="#60a5fa" />
+                      <Text style={{ color: '#d1d5db', fontSize: 13, fontWeight: 'bold', marginLeft: 6, fontFamily: 'PlusJakartaSans_700Bold' }}>
+                        {t('Buyer')}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                )}
+                </View>
               </View>
             </View>
           </View>

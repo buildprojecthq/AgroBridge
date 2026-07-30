@@ -6,15 +6,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { auth, db } from '../../config/firebase';
+import { supabase } from '../../config/supabase';
 import * as Haptics from 'expo-haptics';
 import { View as MotiView } from 'moti';
 import { useAuth } from '../../context/AuthContext';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+// import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import { signInWithPhoneNumber, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
-import { doc, setDoc, getDoc } from '@react-native-firebase/firestore';
 import { useTranslation } from 'react-i18next';
 
 export default function RegisterScreen({ navigation }) {
@@ -22,7 +20,7 @@ export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
-  const [confirm, setConfirm] = useState(null);
+  const [confirm, setConfirm] = useState(false);
   const [role, setRole] = useState('FARMER');
   const [registering, setRegistering] = useState(false);
   const [errors, setErrors] = useState({});
@@ -30,9 +28,9 @@ export default function RegisterScreen({ navigation }) {
   const { setUserRole } = useAuth();
 
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: '108853026140-2m2pshn6krpp7bnld031a0bb0krcm6ht.apps.googleusercontent.com',
-    });
+    // GoogleSignin.configure({
+    //   webClientId: '108853026140-2m2pshn6krpp7bnld031a0bb0krcm6ht.apps.googleusercontent.com',
+    // });
   }, []);
 
   const handleSendOTP = async () => {
@@ -56,23 +54,12 @@ export default function RegisterScreen({ navigation }) {
     setRegistering(true);
     try {
       const fullPhone = `+91${phone.trim()}`;
-      const confirmation = await signInWithPhoneNumber(auth, fullPhone);
-      setConfirm(confirmation);
+      const { error } = await supabase.auth.signInWithOtp({ phone: fullPhone });
+      if (error) throw error;
+      setConfirm(true);
     } catch (error) {
       console.error(error);
-      switch (error.code) {
-        case 'auth/too-many-requests':
-          setErrors({ general: "Too many requests. Please try again later." });
-          break;
-        case 'auth/invalid-phone-number':
-          setErrors({ phone: "The phone number entered is invalid." });
-          break;
-        case 'auth/network-request-failed':
-          setErrors({ general: "Network error. Please check your internet connection." });
-          break;
-        default:
-          setErrors({ general: "Could not send OTP. Please try again." });
-      }
+      setErrors({ general: error.message || "Could not send OTP. Please try again." });
     } finally {
       setRegistering(false);
     }
@@ -88,35 +75,27 @@ export default function RegisterScreen({ navigation }) {
 
     setRegistering(true);
     try {
-      const userCredential = await confirm.confirm(otp);
-      const firebaseUser = userCredential.user;
+      const fullPhone = `+91${phone.trim()}`;
+      const { data, error } = await supabase.auth.verifyOtp({ 
+        phone: fullPhone, 
+        token: otp, 
+        type: 'sms' 
+      });
+      if (error) throw error;
 
-      const userProfile = {
-        uid: firebaseUser.uid,
-        name: name.trim(),
-        email: email.trim(),
-        phone: `+91${phone.trim()}`,
-        role,
-        createdAt: Math.floor(Date.now() / 1000),
-      };
-      await setDoc(doc(db, 'users', firebaseUser.uid), userProfile);
-      setUserRole(role);
+      if (data.user) {
+        const userProfile = {
+          id: data.user.id, // Using 'id' for Supabase instead of 'uid'
+          // name, email, phone might be best stored in a separate profiles table, but using users table as defined in schema
+          role: role,
+        };
+        const { error: dbError } = await supabase.from('users').upsert(userProfile);
+        if (dbError) throw dbError;
+        setUserRole(role);
+      }
     } catch (error) {
       console.error(error);
-      switch (error.code) {
-        case 'auth/invalid-verification-code':
-          setErrors({ otp: "The code you entered is incorrect. Please try again." });
-          break;
-        case 'auth/code-expired':
-          setErrors({ otp: "This code has expired. Please request a new one." });
-          setConfirm(null);
-          break;
-        case 'auth/network-request-failed':
-          setErrors({ general: "Network error. Please check your internet connection." });
-          break;
-        default:
-          setErrors({ general: "Invalid OTP code." });
-      }
+      setErrors({ general: error.message || "Invalid OTP code." });
     } finally {
       setRegistering(false);
     }
@@ -126,26 +105,7 @@ export default function RegisterScreen({ navigation }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRegistering(true);
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const { idToken } = await GoogleSignin.signIn();
-      const googleCredential = GoogleAuthProvider.credential(idToken);
-      const userCredential = await signInWithCredential(auth, googleCredential);
-      const firebaseUser = userCredential.user;
-      if (!firebaseUser?.uid) throw new Error('Failed to authenticate user correctly.');
-
-      const userDocRef = doc(db, 'users', firebaseUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
-      if (!userDocSnap.exists) {
-        await setDoc(userDocRef, {
-          uid: firebaseUser.uid,
-          name: firebaseUser.displayName || 'Google User',
-          email: firebaseUser.email || '',
-          phone: firebaseUser.phoneNumber || '',
-          role,
-          createdAt: Math.floor(Date.now() / 1000),
-        });
-      }
-      setUserRole(role);
+      alert("Google Sign-In requires a custom native build. Please use Phone OTP to test the app in Expo Go!");
     } catch (error) {
       console.error(error);
       setErrors({ general: error.message });
@@ -162,7 +122,7 @@ export default function RegisterScreen({ navigation }) {
     height: 56,
     paddingHorizontal: 16,
   };
-  const inputTextStyle = { flex: 1, fontSize: 16, color: '#fff', fontFamily: 'NotoSans_400Regular' };
+  const inputTextStyle = { flex: 1, fontSize: 16, color: '#fff', fontFamily: 'PlusJakartaSans_400Regular' };
 
   return (
     <KeyboardAvoidingView
@@ -209,7 +169,7 @@ export default function RegisterScreen({ navigation }) {
               style={{
                 fontSize: 36, fontWeight: 'bold', color: '#ffffff',
                 letterSpacing: -0.5, marginBottom: 8,
-                fontFamily: 'NotoSans_800ExtraBold',
+                fontFamily: 'PlusJakartaSans_800ExtraBold',
                 textShadowColor: 'rgba(0,0,0,0.6)',
                 textShadowOffset: { width: 0, height: 2 },
                 textShadowRadius: 8,
@@ -220,7 +180,7 @@ export default function RegisterScreen({ navigation }) {
             <Text
               style={{
                 fontSize: 18, color: '#d1d5db',
-                fontFamily: 'NotoSans_500Medium',
+                fontFamily: 'PlusJakartaSans_500Medium',
                 textShadowColor: 'rgba(0,0,0,0.5)',
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 4,
@@ -265,7 +225,7 @@ export default function RegisterScreen({ navigation }) {
                   {!confirm ? (
                     <>
                       <View>
-                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}>
                           {t('Full Name')}
                         </Text>
                         <TextInput
@@ -275,11 +235,11 @@ export default function RegisterScreen({ navigation }) {
                           value={name}
                           onChangeText={(val) => { setName(val); setErrors(p => ({ ...p, name: '' })); }}
                         />
-                        {errors.name ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>{errors.name}</Text> : null}
+                        {errors.name ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{errors.name}</Text> : null}
                       </View>
 
                       <View>
-                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}>
                           {t('Email Address')}
                         </Text>
                         <TextInput
@@ -291,15 +251,15 @@ export default function RegisterScreen({ navigation }) {
                           keyboardType="email-address"
                           autoCapitalize="none"
                         />
-                        {errors.email ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>{errors.email}</Text> : null}
+                        {errors.email ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{errors.email}</Text> : null}
                       </View>
 
                       <View>
-                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}>
                           {t('Phone Number')}
                         </Text>
                         <View style={{ ...inputContainerStyle, flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginRight: 12, fontFamily: 'NotoSans_700Bold' }}>+91</Text>
+                          <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginRight: 12, fontFamily: 'PlusJakartaSans_700Bold' }}>+91</Text>
                           {/* Vertical Separator */}
                           <View style={{ width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.2)', marginRight: 12 }} />
                           <TextInput
@@ -318,12 +278,12 @@ export default function RegisterScreen({ navigation }) {
                             maxLength={10}
                           />
                         </View>
-                        {errors.phone ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>{errors.phone}</Text> : null}
+                        {errors.phone ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{errors.phone}</Text> : null}
                       </View>
 
                       {/* Role selector */}
                       <View>
-                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}>
                           Select Your Role
                         </Text>
                         <View style={{ flexDirection: 'row' }}>
@@ -340,7 +300,7 @@ export default function RegisterScreen({ navigation }) {
                                 borderColor: role === r ? '#22c55e' : 'rgba(255,255,255,0.10)',
                               }}
                             >
-                              <Text style={{ fontSize: 14, fontWeight: 'bold', color: role === r ? '#fff' : '#9ca3af', fontFamily: 'NotoSans_700Bold' }}>
+                              <Text style={{ fontSize: 14, fontWeight: 'bold', color: role === r ? '#fff' : '#9ca3af', fontFamily: 'PlusJakartaSans_700Bold' }}>
                                 {r === 'FARMER' ? 'Farmer' : 'Buyer / Company'}
                               </Text>
                             </TouchableOpacity>
@@ -349,7 +309,7 @@ export default function RegisterScreen({ navigation }) {
                       </View>
 
                       {errors.general ? (
-                        <Text style={{ color: '#f87171', fontSize: 14, fontWeight: 'bold', textAlign: 'center', fontFamily: 'NotoSans_600SemiBold' }}>
+                        <Text style={{ color: '#f87171', fontSize: 14, fontWeight: 'bold', textAlign: 'center', fontFamily: 'PlusJakartaSans_600SemiBold' }}>
                           {errors.general}
                         </Text>
                       ) : null}
@@ -368,14 +328,14 @@ export default function RegisterScreen({ navigation }) {
                       >
                         {registering
                           ? <ActivityIndicator color="#fff" />
-                          : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'NotoSans_700Bold' }}>Send OTP</Text>
+                          : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'PlusJakartaSans_700Bold' }}>Send OTP</Text>
                         }
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
                       <View>
-                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'NotoSans_700Bold' }}>
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}>
                           {t('Enter OTP Code')}
                         </Text>
                         <TextInput
@@ -387,11 +347,11 @@ export default function RegisterScreen({ navigation }) {
                           keyboardType="number-pad"
                           maxLength={6}
                         />
-                        {errors.otp ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'NotoSans_600SemiBold' }}>{errors.otp}</Text> : null}
+                        {errors.otp ? <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 6, marginLeft: 4, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{errors.otp}</Text> : null}
                       </View>
 
                       {errors.general ? (
-                        <Text style={{ color: '#f87171', fontSize: 14, fontWeight: 'bold', textAlign: 'center', fontFamily: 'NotoSans_600SemiBold' }}>
+                        <Text style={{ color: '#f87171', fontSize: 14, fontWeight: 'bold', textAlign: 'center', fontFamily: 'PlusJakartaSans_600SemiBold' }}>
                           {errors.general}
                         </Text>
                       ) : null}
@@ -410,12 +370,12 @@ export default function RegisterScreen({ navigation }) {
                       >
                         {registering
                           ? <ActivityIndicator color="#fff" />
-                          : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'NotoSans_700Bold' }}>Verify & Register</Text>
+                          : <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', fontFamily: 'PlusJakartaSans_700Bold' }}>Verify & Register</Text>
                         }
                       </TouchableOpacity>
 
-                      <TouchableOpacity style={{ marginTop: 12, alignItems: 'center' }} onPress={() => setConfirm(null)}>
-                        <Text style={{ color: '#d1d5db', fontSize: 15, fontFamily: 'NotoSans_600SemiBold' }}>
+                      <TouchableOpacity style={{ marginTop: 12, alignItems: 'center' }} onPress={() => setConfirm(false)}>
+                        <Text style={{ color: '#d1d5db', fontSize: 15, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
                           {t('Change Details')}
                         </Text>
                       </TouchableOpacity>
@@ -439,15 +399,15 @@ export default function RegisterScreen({ navigation }) {
                       <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                       <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                     </Svg>
-                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8, fontFamily: 'NotoSans_700Bold' }}>
+                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8, fontFamily: 'PlusJakartaSans_700Bold' }}>
                       {t('Register with Google')}
                     </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={{ marginTop: 8, alignItems: 'center' }} onPress={() => navigation.navigate('Login')}>
-                    <Text style={{ color: '#9ca3af', fontSize: 15, fontFamily: 'NotoSans_600SemiBold' }}>
+                    <Text style={{ color: '#9ca3af', fontSize: 15, fontFamily: 'PlusJakartaSans_600SemiBold' }}>
                       {t('Already have an account?')}{' '}
-                      <Text style={{ color: '#fff', fontFamily: 'NotoSans_800ExtraBold' }}>{t('Login here')}</Text>
+                      <Text style={{ color: '#fff', fontFamily: 'PlusJakartaSans_800ExtraBold' }}>{t('Login here')}</Text>
                     </Text>
                   </TouchableOpacity>
                 </View>

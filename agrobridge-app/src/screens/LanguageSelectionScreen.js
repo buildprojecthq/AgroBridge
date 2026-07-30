@@ -70,7 +70,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                   color: '#ffffff',
                   letterSpacing: -0.5,
                   marginBottom: 8,
-                  fontFamily: 'NotoSans_800ExtraBold',
+                  fontFamily: 'PlusJakartaSans_800ExtraBold',
                   textShadowColor: 'rgba(0,0,0,0.6)',
                   textShadowOffset: { width: 0, height: 2 },
                   textShadowRadius: 8,
@@ -83,7 +83,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                   color: '#d1d5db',
                   fontSize: 18,
                   marginBottom: 32,
-                  fontFamily: 'NotoSans_500Medium',
+                  fontFamily: 'PlusJakartaSans_500Medium',
                   textShadowColor: 'rgba(0,0,0,0.5)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 4,
@@ -162,7 +162,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                           style={{
                             color: '#ffffff',
                             fontSize: 18,
-                            fontFamily: 'NotoSans_700Bold',
+                            fontFamily: 'PlusJakartaSans_700Bold',
                           }}
                         >
                           {item.native}
@@ -172,7 +172,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                             color: '#ffffff', // Changed from #9ca3af to match other text
                             fontSize: 13,
                             marginTop: 2,
-                            fontFamily: 'NotoSans_500Medium',
+                            fontFamily: 'PlusJakartaSans_500Medium',
                             opacity: 0.9, // Slight opacity to still differentiate it slightly
                           }}
                         >
@@ -229,7 +229,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                 style={{
                   color: '#ffffff',
                   fontSize: 18,
-                  fontFamily: 'NotoSans_700Bold',
+                  fontFamily: 'PlusJakartaSans_700Bold',
                 }}
               >
                 Continue

@@ -2,6 +2,7 @@
 import React from 'react';
 import { ActivityIndicator, View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import RegisterScreen from '../screens/auth/RegisterScreen';
@@ -13,8 +14,8 @@ import BuyerDashboard from '../screens/buyer/BuyerDashboard';
 import CommodityDetailScreen from '../screens/buyer/CommodityDetailScreen';
 import ChatScreen from '../screens/ChatScreen';
 import CheckoutScreen from '../screens/buyer/CheckoutScreen';
-import ProfileScreen from '../screens/ProfileScreen';
 import LanguageSelectionScreen from '../screens/LanguageSelectionScreen';
+import MainTabNavigator from './MainTabNavigator';
 
 import * as SplashScreen from 'expo-splash-screen';
 
@@ -35,9 +36,22 @@ export default function AppNavigator() {
     return null; // Don't show ActivityIndicator, let the native splash screen hold it
   }
 
+  const linking = {
+    prefixes: [Linking.createURL('/')],
+    config: {
+      screens: {
+        MainTabs: {
+          screens: {
+            Inbox: 'Inbox'
+          }
+        }
+      }
+    }
+  };
+
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={!language ? "LanguageSelection" : "Login"}>
+    <NavigationContainer linking={linking}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user === null ? (
           // 1. AUTHENTICATION FLOW (User is not logged in)
           <>
@@ -45,29 +59,17 @@ export default function AppNavigator() {
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
           </>
-        ) : userRole === 'FARMER' ? (
-          // 2. FARMER FLOW (Authenticated as Farmer)
+        ) : (
+          // 2. AUTHENTICATED FLOW (Unified Bottom Tabs for all users)
           <>
-            <Stack.Screen name="FarmerHome" component={DashboardScreen} />
+            <Stack.Screen name="MainTabs" component={MainTabNavigator} />
             <Stack.Screen name="CropUpload" component={CropUploadScreen} />
             <Stack.Screen name="Inbox" component={InboxScreen} />
-            <Stack.Screen name="Chat" component={ChatScreen} />
-            <Stack.Screen name="Profile" component={ProfileScreen} />
-            <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
-          </>
-        ) : userRole === 'BUYER' ? (
-          // 3. BUYER FLOW (Authenticated as Buyer)
-          <>
-            <Stack.Screen name="BuyerHome" component={BuyerDashboard} />
             <Stack.Screen name="CommodityDetail" component={CommodityDetailScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Checkout" component={CheckoutScreen} />
-            <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
           </>
-        ) : (
-          // 4. FALLBACK (Authenticated but Firestore registration profile hasn't loaded or role is missing)
-          <Stack.Screen name="Register" component={RegisterScreen} />
         )}
       </Stack.Navigator>
     </NavigationContainer>

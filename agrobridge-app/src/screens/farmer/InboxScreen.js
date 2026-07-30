@@ -1,101 +1,242 @@
-// agrobridge-app/src/screens/farmer/InboxScreen.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { collection, query, where, onSnapshot } from '@react-native-firebase/firestore';
-import { db } from '../../config/firebase';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
+import { scheduleLocalNotification } from '../../utils/notifications';
 
 export default function InboxScreen({ navigation }) {
-  const { user } = useAuth();
-  const [conversations, setConversations] = useState([]);
+  const { user, userRole } = useAuth();
+  const { t } = useTranslation();
+  const [escrows, setEscrows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // For the prototype, we find conversations by querying messages where the farmer is the receiver.
-    // In a production app, a separate 'conversations' collection is better for performance.
-    const messagesRef = collection(db, 'messages');
-    const q = query(messagesRef, where("receiverId", "==", user.uid));
+  const isBuyer = userRole === 'BUYER' || userRole === 'GUEST_BUYER';
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const convos = new Map();
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        // Keep the latest message for each conversation
-        if (!convos.has(data.conversationId) || convos.get(data.conversationId).createdAt < data.createdAt) {
-          convos.set(data.conversationId, {
-            id: data.conversationId,
-            cropId: data.cropId,
-            buyerId: data.senderId,
-            latestText: data.text,
-            createdAt: data.createdAt
-          });
+  useEffect(() => {
+    const userId = user?.id || user?.uid;
+    if (!userId) return;
+
+    const verifyPayment = async (orderId) => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const { data, error } = await supabase.functions.invoke('cashfree-integration', {
+          body: {
+            action: 'verifyPayment',
+            data: { orderId }
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
+        });
+
+        if (data?.success) {
+          fetchOrders();
+        }
+      } catch (e) {
+        console.error("Verification error for order:", orderId, e);
+      }
+    };
+
+    const fetchOrders = async () => {
+      try {
+        let q;
+        if (isBuyer) {
+          q = supabase.from('orders').select('*, crops(name, farmer_id)').eq('buyer_id', userId).order('created_at', { ascending: false });
+        } else {
+          q = supabase.from('orders').select('*, crops!inner(name, farmer_id)').eq('crops.farmer_id', userId).order('created_at', { ascending: false });
+        }
+
+        const { data, error } = await q;
+        
+        if (error) throw error;
+        
+        if (data) {
+          const activeEscrows = data.map(order => ({
+            id: order.id,
+            status: order.status,
+            agreedPrice: order.total_price,
+            cropName: order.crops?.name || 'Crop',
+            buyerId: order.buyer_id
+          }));
+          setEscrows(activeEscrows);
+
+          // Auto-verify any pending payments for the buyer
+          if (isBuyer) {
+            data.forEach(order => {
+              if (order.status === 'pending_payment') {
+                verifyPayment(order.id);
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Supabase Error in InboxScreen:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+
+    const channel = supabase
+      .channel('public:orders_inbox')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, payload => {
+        if (payload.new.status !== payload.old.status && (payload.new.buyer_id === userId || payload.new.farmer_id === userId)) {
+          scheduleLocalNotification('Order Updated', `An order status changed to ${payload.new.status}`);
+        }
+        fetchOrders();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, userRole]);
+
+  const handleReleaseEscrow = async (orderId) => {
+    try {
+      setLoading(true);
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.functions.invoke('cashfree-integration', {
+        body: {
+          action: 'releaseEscrow',
+          data: { orderId: orderId }
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
         }
       });
-      // Sort by descending createdAt (newest first)
-      setConversations(Array.from(convos.values()).sort((a, b) => b.createdAt - a.createdAt));
+
+      if (error) throw error;
+      
+      // Update local state to reflect change without waiting for realtime
+      setEscrows(prev => prev.map(e => e.id === orderId ? { ...e, status: 'completed' } : e));
+      alert(t("Success: Funds have been released to the farmer."));
+
+    } catch (err) {
+      console.error("Release Escrow Error:", err);
+      alert(t("Error: Could not release funds. Please try again."));
+    } finally {
       setLoading(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
-  }, [user.uid]);
+  const renderEscrowCard = ({ item }) => {
+    let statusColor = "bg-amber-100 border-amber-300 text-amber-700";
+    let statusText = t("Action Required: Check Chat");
+    let iconName = "time-outline";
+    let iconColor = "#d97706";
 
-  const renderConversation = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.conversationCard}
-      onPress={() => navigation.navigate('Chat', {
-        cropId: item.cropId,
-        cropName: "Crop Inquiry", // Generic fallback name
-        targetUserId: item.buyerId,
-        targetUserName: `Buyer ${item.buyerId.substring(0, 5)}`
-      })}
-    >
-      <View style={styles.cardContent}>
-        <Text style={styles.buyerName}>Buyer {item.buyerId.substring(0, 5)}...</Text>
-        <Text style={styles.latestText} numberOfLines={1}>{item.latestText}</Text>
+    if (item.status === "escrow_locked") {
+      statusColor = "bg-blue-100 border-blue-300 text-blue-700";
+      statusText = t("Payment Secured: Ready for Delivery");
+      iconName = "lock-closed-outline";
+      iconColor = "#2563eb";
+    } else if (item.status === "completed") {
+      statusColor = "bg-green-100 border-green-300 text-green-700";
+      statusText = t("Completed: Funds Released");
+      iconName = "checkmark-circle-outline";
+      iconColor = "#16a34a";
+    }
+
+    return (
+      <View 
+        className="bg-white p-5 rounded-3xl mb-4 border border-slate-100"
+        style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }}
+      >
+        <TouchableOpacity onPress={() => navigation.navigate('Chat', { escrowId: item.id })}>
+          <View className="flex-row justify-between items-center mb-3">
+            <View className="flex-row items-center">
+              <View className="bg-emerald-100 p-2 rounded-xl mr-3">
+                <Ionicons name="leaf" size={20} color="#10b981" />
+              </View>
+              <View>
+                <Text className="text-slate-800 font-bold text-lg">{item.cropName}</Text>
+                <Text className="text-slate-500 text-xs">Buyer ID: {item.buyerId.substring(0, 6).toUpperCase()}</Text>
+              </View>
+            </View>
+            <Text className="text-emerald-600 font-bold text-lg">₹{item.agreedPrice}</Text>
+          </View>
+
+          <View className={`flex-row items-center px-3 py-2 rounded-xl border ${statusColor} mb-2`}>
+            <Ionicons name={iconName} size={16} color={iconColor} style={{ marginRight: 6 }} />
+            <Text className={`font-bold text-xs ${statusColor.split(' ').pop()}`}>
+              {statusText}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Action Button for Buyer to Release Funds */}
+        {isBuyer && item.status === "escrow_locked" && (
+          <TouchableOpacity 
+            className="mt-3 bg-emerald-600 py-3 rounded-xl items-center flex-row justify-center"
+            onPress={() => handleReleaseEscrow(item.id)}
+          >
+            <Ionicons name="checkmark-done" size={18} color="white" style={{ marginRight: 6 }} />
+            <Text className="text-white font-bold text-sm">{t("Confirm Delivery & Release Funds")}</Text>
+          </TouchableOpacity>
+        )}
       </View>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>{"< Back"}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Inbox</Text>
-      </View>
-
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#2E7D32" />
+    <SafeAreaView className="flex-1 bg-slate-50" edges={['left', 'right']}>
+      {/* ── Premium Top Header ── */}
+      <LinearGradient 
+        colors={['#10b981', '#0d9488']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        className="px-6 w-full z-10"
+        style={{
+          paddingTop: 30, // Accounts for status bar
+          paddingBottom: 24,
+          borderBottomLeftRadius: 40,
+          borderBottomRightRadius: 40,
+          shadowColor: '#059669', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 12
+        }}
+      >
+        <View className="flex-row items-center ml-3 mt-2">
+          <View>
+            <Text className="text-white text-3xl font-bold font-['PlusJakartaSans_800ExtraBold']">
+              {isBuyer ? t("Inbox & Orders") : t("Inbox & Sales")}
+            </Text>
+            <Text className="text-emerald-100 font-medium opacity-90 font-['PlusJakartaSans_500Medium'] mt-1">
+              {isBuyer ? t("Active Purchases & Chats") : t("Active Sales & Escrow Contracts")}
+            </Text>
+          </View>
         </View>
-      ) : conversations.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>No messages yet.</Text>
+      </LinearGradient>
+
+      {/* ── List Area ── */}
+      {loading ? (
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#10b981" />
+        </View>
+      ) : escrows.length === 0 ? (
+        <View className="flex-1 justify-center items-center px-8">
+          <Ionicons name="mail-open-outline" size={64} color="#cbd5e1" className="mb-4" />
+          <Text className="text-slate-500 font-medium text-center text-lg mt-4">
+            {t("No active orders or messages yet.")}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={escrows}
           keyExtractor={(item) => item.id}
-          renderItem={renderConversation}
-          contentContainerStyle={styles.listContainer}
+          renderItem={renderEscrowCard}
+          contentContainerStyle={{ padding: 16, paddingTop: 24, paddingBottom: 40 }}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 15, paddingHorizontal: 15, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#eee' },
-  backButton: { marginRight: 15, padding: 5 },
-  backButtonText: { color: '#2E7D32', fontSize: 16, fontWeight: 'bold' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-  listContainer: { padding: 16 },
-  conversationCard: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
-  cardContent: { flexDirection: 'column' },
-  buyerName: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  latestText: { fontSize: 14, color: '#666' },
-  emptyText: { fontSize: 16, color: '#666', fontStyle: 'italic' }
-});

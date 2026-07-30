@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── USERS ──
+    match /users/{userId} {
+      // Anyone logged in can read public profile data
+      allow read: if request.auth != null; 
+      // Users can only write/update their own profile
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ── ESCROW CONTRACTS ──
+    match /escrow_contracts/{escrowId} {
+      // Only the specific buyer or farmer involved can read the contract
+      allow read: if request.auth != null && (request.auth.uid == resource.data.buyerId || request.auth.uid == resource.data.farmerId);
+      
+      // To create a contract, the user MUST legitimately be the buyer
+      allow create: if request.auth != null && request.resource.data.buyerId == request.auth.uid;
+      
+      // Only participants can update the status
+      allow update: if request.auth != null && (request.auth.uid == resource.data.buyerId || request.auth.uid == resource.data.farmerId);
+    }
+
+    // ── MESSAGES (Chat/P2P Room) ──
+    match /messages/{messageId} {
+      // Prevent identity spoofing: The senderId MUST match the actual Auth UID
+      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
+      
+      // Simplified read access for MVP (in prod, verify escrow involvement)
+      allow read: if request.auth != null; 
+    }
+
+    // ── MANDI PRICES ──
+    match /mandi_prices/{priceId} {
+      // Anyone can read government pricing data
+      allow read: if true;
+      // Nobody can write from the client app. Only the Cloud Function (Admin SDK) can write!
+      allow write: if false; 
+    }
+
+    // ── ACTIVE CROPS (Marketplace) ──
+    match /active_crops/{cropId} {
+      // Anyone can browse crops
+      allow read: if true;
+      // A farmer can only post crops under their own identity
+      allow create: if request.auth != null && request.resource.data.farmerId == request.auth.uid;
+      // Only the original farmer can edit/delete their crops
+      allow update, delete: if request.auth != null && resource.data.farmerId == request.auth.uid;
+    }
+  }
+}

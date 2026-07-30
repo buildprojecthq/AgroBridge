@@ -1,8 +1,5 @@
-// agrobridge-app/src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { auth, db } from '../config/firebase';
-import { doc, getDoc } from '@react-native-firebase/firestore';
-import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
+import { supabase } from '../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 
@@ -35,54 +32,69 @@ export const AuthProvider = ({ children }) => {
         setLanguageChecked(true);
       }
     };
+    
     checkLanguage();
-    // Listen for Firebase Auth state changes (Login / Logout / Session persistence)
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
-      if (firebaseUser) {
-        setUser(firebaseUser);
 
-        try {
-          // Fetch the user's specific role from the Firestore 'users' collection
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
+    const fetchUserProfile = async (userId) => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', userId)
+          .maybeSingle();
 
-          if (userDocSnap.exists && userDocSnap.data()) {
-            setUserRole(userDocSnap.data().role);
-          } else {
-            console.log("No user profile found in Firestore yet.");
-            setUserRole(null);
-          }
-        } catch (error) {
-          console.error("Error fetching user role from Firestore:", error);
+        if (error) {
+          console.error("Error fetching user role from Supabase:", error);
           setUserRole(null);
+        } else if (data) {
+          setUserRole(data.role);
         }
+      } catch (error) {
+        console.error("Error in profile fetch:", error);
+        setUserRole(null);
+      }
+    };
+
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        fetchUserProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for Supabase Auth state changes (Login / Logout)
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setLoading(true);
+      
+      if (session?.user) {
+        setUser(session.user);
+        await fetchUserProfile(session.user.id);
       } else {
         // Clear global states on logout
         setUser(null);
         setUserRole(null);
       }
+      
       setLoading(false);
     });
 
-    return unsubscribe; // Clean up listener on unmount
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   // Secure logout function accessible from anywhere in the app
   const logout = async () => {
     setLoading(true);
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
     } catch (error) {
       console.error("Logout failed:", error);
     }
     setLoading(false);
-  };
-
-  // Development bypass to easily login without OTP
-  const bypassLogin = (role = 'FARMER') => {
-    setUser({ uid: 'dev-bypass-123', email: 'dev@agrobridge.com', displayName: 'Developer', phoneNumber: '+919999999999' });
-    setUserRole(role);
   };
 
   const changeAppLanguage = async (langId) => {
@@ -96,7 +108,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userRole, loading, language, languageChecked, setLanguage: changeAppLanguage, setUserRole, logout, bypassLogin }}>
+    <AuthContext.Provider value={{ user, userRole, loading, language, languageChecked, setLanguage: changeAppLanguage, setUserRole, logout }}>
       {children}
     </AuthContext.Provider>
   );

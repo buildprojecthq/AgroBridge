@@ -1,9 +1,12 @@
 // agrobridge-app/src/screens/farmer/CropUploadScreen.js
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, View, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import { collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
-import { db } from '../../config/firebase';
+import { StyleSheet, Text, TextInput, View, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
+import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function CropUploadScreen({ navigation }) {
   const { user } = useAuth();
@@ -11,52 +14,91 @@ export default function CropUploadScreen({ navigation }) {
   const [cropType, setCropType] = useState('');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
+  const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5, // Compress for faster upload
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
   const handleListCrop = async () => {
-    // 1. Validate inputs
+    // 1. Strict Form Validation
     if (!cropType || !quantity || !price) {
-      Alert.alert("Error", "Please fill out all fields.");
+      Alert.alert("Missing Details", "Please fill out all fields before uploading.");
+      return;
+    }
+
+    if (!image) {
+      Alert.alert("Missing Photo", "Please add a photo of your crop so buyers can see it!");
       return;
     }
 
     const parsedQuantity = parseFloat(quantity);
     const parsedPrice = parseFloat(price);
 
-    if (isNaN(parsedQuantity) || isNaN(parsedPrice)) {
-      Alert.alert("Error", "Quantity and Price must be valid numbers.");
+    if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
+      Alert.alert("Invalid Quantity", "Quantity must be a positive number.");
+      return;
+    }
+
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      Alert.alert("Invalid Price", "Price must be a positive number.");
       return;
     }
 
     setUploading(true);
     try {
-      // 2. Structure the data for the marketplace
-      const cropData = {
-        farmerId: user.uid,
-        cropType: cropType.trim(),
-        quantityKg: parsedQuantity,
-        pricePerKg: parsedPrice,
-        status: 'AVAILABLE',
-        // Temporary dummy image until Firebase Storage is unlocked
-        imageUrl: 'https://via.placeholder.com/300?text=Crop+Image',
-        listedAt: serverTimestamp() // Let Firebase handle the exact server time
-      };
+      const userId = user?.id || user?.uid;
 
-      // 3. Write to the 'crops' collection in Firestore
-      // Using addDoc automatically generates a unique Document ID
-      await addDoc(collection(db, 'crops'), cropData);
+      // 2. Upload Image to Supabase Storage
+      const base64 = await FileSystem.readAsStringAsync(image, { encoding: 'base64' });
+      const filePath = `${userId}/${Date.now()}.jpg`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('crop-images')
+        .upload(filePath, decode(base64), { contentType: 'image/jpeg' });
+
+      if (uploadError) throw uploadError;
+
+      // 3. Get Public URL of the uploaded image
+      const { data: publicUrlData } = supabase.storage
+        .from('crop-images')
+        .getPublicUrl(filePath);
+      
+      const imageUrl = publicUrlData.publicUrl;
+
+      // 4. Write to the 'crops' table in Supabase
+      const { error: dbError } = await supabase.from('crops').insert([{
+        farmer_id: userId,
+        name: cropType.trim(),
+        quantity_available: parsedQuantity,
+        price_per_kg: parsedPrice,
+        image_url: imageUrl
+      }]);
+
+      if (dbError) throw dbError;
 
       Alert.alert("Success!", `${cropType} has been listed on the marketplace.`);
 
-      // 4. Reset form and navigate back to Dashboard
+      // 5. Reset form and navigate back to Dashboard
       setCropType('');
       setQuantity('');
       setPrice('');
+      setImage(null);
       navigation.goBack();
 
     } catch (error) {
       console.error("Error listing crop:", error);
-      Alert.alert("Upload Failed", "Could not list your crop. Try again.");
+      Alert.alert("Upload Failed", "Could not list your crop. Please check your connection and try again.");
     } finally {
       setUploading(false);
     }
@@ -94,9 +136,15 @@ export default function CropUploadScreen({ navigation }) {
           keyboardType="decimal-pad"
         />
 
-        {/* Placeholder for future Image Picker button */}
-        <TouchableOpacity style={styles.imageButton} disabled={true}>
-          <Text style={styles.imageButtonText}>📷 Add Photo (Coming Soon)</Text>
+        <TouchableOpacity style={styles.imageButton} onPress={pickImage} disabled={uploading}>
+          {image ? (
+            <Image source={{ uri: image }} style={styles.previewImage} />
+          ) : (
+            <>
+              <Ionicons name="camera-outline" size={32} color="#555" />
+              <Text style={styles.imageButtonText}>Tap to Add Photo</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.submitButton} onPress={handleListCrop} disabled={uploading}>
@@ -114,8 +162,9 @@ const styles = StyleSheet.create({
   formCard: { backgroundColor: '#fff', padding: 20, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: { backgroundColor: '#fafafa', padding: 14, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', marginBottom: 16, fontSize: 16 },
-  imageButton: { backgroundColor: '#e0e0e0', padding: 16, borderRadius: 8, alignItems: 'center', marginBottom: 24, borderStyle: 'dashed', borderWidth: 1, borderColor: '#999' },
-  imageButtonText: { color: '#555', fontWeight: 'bold' },
+  imageButton: { backgroundColor: '#e0e0e0', height: 150, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 24, borderStyle: 'dashed', borderWidth: 1, borderColor: '#999', overflow: 'hidden' },
+  imageButtonText: { color: '#555', fontWeight: 'bold', marginTop: 8 },
+  previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   submitButton: { backgroundColor: '#2E7D32', padding: 16, borderRadius: 8, alignItems: 'center' },
   submitButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' }
 });
