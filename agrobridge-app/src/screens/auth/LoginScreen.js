@@ -24,7 +24,6 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isMockMode, setIsMockMode] = useState(false);
-  const [showRoleSelector, setShowRoleSelector] = useState(false);
   const { t } = useTranslation();
   const { setUserRole } = useAuth();
 
@@ -43,15 +42,11 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      const fullPhone = `+91${phone.trim()}`;
-      const { error } = await supabase.auth.signInWithOtp({ phone: fullPhone });
-      if (error) throw error;
+      // Simulate network delay for presentation
+      await new Promise(resolve => setTimeout(resolve, 1500));
       setConfirm(true);
     } catch (error) {
-      console.log("Supabase OTP failed, entering local mock fallback mode:", error.message);
-      setIsMockMode(true);
-      setConfirm(true);
-      setErrorMsg(""); // Silent fallback for presentation
+      console.log("Error:", error.message);
     } finally {
       setLoading(false);
     }
@@ -65,20 +60,20 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      if (isMockMode) {
-        if (otp && otp.length === 6) {
-          setShowRoleSelector(true);
-        } else {
-          throw new Error('Please enter a valid 6-digit OTP.');
+      if (otp && otp.length === 6) {
+        const fakeEmail = `${phone.trim()}@agrobridge.app`;
+        const fakePassword = `AgroMock123!`;
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: fakeEmail,
+          password: fakePassword,
+        });
+
+        if (error) {
+          throw new Error("User not found or invalid OTP. Please register first.");
         }
       } else {
-        const fullPhone = `+91${phone.trim()}`;
-        const { data, error } = await supabase.auth.verifyOtp({ 
-          phone: fullPhone, 
-          token: otp, 
-          type: 'sms' 
-        });
-        if (error) throw error;
+        throw new Error('Please enter a valid 6-digit OTP.');
       }
     } catch (error) {
       console.error(error);
@@ -88,27 +83,6 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  const handleSelectMockRole = async (selectedRole) => {
-    setLoading(true);
-    setErrorMsg('');
-    try {
-      const { data, error } = await supabase.auth.signInAnonymously();
-      if (error) throw error;
-      if (data.user) {
-        await supabase.from('users').upsert({
-          id: data.user.id,
-          role: selectedRole
-        });
-        setUserRole(selectedRole);
-      }
-    } catch (e) {
-      console.error(e);
-      setErrorMsg('Failed to create mock session.');
-    } finally {
-      setLoading(false);
-      setShowRoleSelector(false);
-    }
-  };
 
   const handleGoogleSignIn = async () => {
     setErrorMsg('');
@@ -263,33 +237,7 @@ export default function LoginScreen({ navigation }) {
             {/* L4 — Content */}
             <View style={{ paddingHorizontal: 16, paddingTop: 32, paddingBottom: 32 }}>
 
-              {showRoleSelector ? (
-                <View>
-                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, fontFamily: 'PlusJakartaSans_700Bold' }}>
-                    Select Demo Role
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TouchableOpacity
-                      style={{ flex: 1, height: 50, borderRadius: 16, backgroundColor: '#16a34a', alignItems: 'center', justifyContent: 'center' }}
-                      onPress={() => handleSelectMockRole('FARMER')}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: 'bold' }}>Farmer</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{ flex: 1, height: 50, borderRadius: 16, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center' }}
-                      onPress={() => handleSelectMockRole('BUYER')}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: 'bold' }}>Buyer</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {errorMsg ? (
-                    <Text style={{ color: '#f87171', fontSize: 12, fontWeight: 'bold', marginTop: 8, textAlign: 'center', fontFamily: 'PlusJakartaSans_600SemiBold' }}>
-                      {errorMsg}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : (
-                <View style={{ gap: 16 }}>
+              <View style={{ gap: 16 }}>
                 {!confirm ? (
                   <View>
                     {/* Phone input */}
@@ -474,7 +422,6 @@ export default function LoginScreen({ navigation }) {
                   </View>
                 </View>
               </View>
-              )}
             </View>
           </View>
           </MotiView>

@@ -28,7 +28,7 @@ export default function MockPaymentScreen({ route, navigation }) {
         if (cropId && cropId !== '00000000-0000-0000-0000-000000000000') {
           await supabase.rpc('decrement_crop_quantity', {
             crop_id_param: cropId,
-            qty_to_deduct: quantityPurchased || 1
+            qty_to_deduct: 99999999 // Forces quantity to 0 so it disappears from the marketplace
           });
         }
         

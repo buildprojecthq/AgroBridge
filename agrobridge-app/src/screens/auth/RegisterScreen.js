@@ -26,7 +26,7 @@ export default function RegisterScreen({ navigation }) {
   const [errors, setErrors] = useState({});
   const [isMockMode, setIsMockMode] = useState(false);
   const { t } = useTranslation();
-  const { setUserRole } = useAuth();
+  const { setUserRole, setUserProfile } = useAuth();
 
   useEffect(() => {
     // GoogleSignin.configure({
@@ -54,15 +54,11 @@ export default function RegisterScreen({ navigation }) {
 
     setRegistering(true);
     try {
-      const fullPhone = `+91${phone.trim()}`;
-      const { error } = await supabase.auth.signInWithOtp({ phone: fullPhone });
-      if (error) throw error;
+      // Simulate network delay for presentation
+      await new Promise(resolve => setTimeout(resolve, 1500));
       setConfirm(true);
     } catch (error) {
-      console.log("Supabase OTP failed, entering local mock fallback mode:", error.message);
-      setIsMockMode(true);
-      setConfirm(true);
-      setErrors({}); // Silent fallback for presentation
+      console.log("Error:", error.message);
     } finally {
       setRegistering(false);
     }
@@ -78,49 +74,41 @@ export default function RegisterScreen({ navigation }) {
 
     setRegistering(true);
     try {
-      if (isMockMode) {
-        if (otp && otp.length === 6) {
-          const { data, error } = await supabase.auth.signInAnonymously();
-          if (error) throw error;
+      // 1. Create a fake email and hardcoded password for persistent mock auth
+      const fakeEmail = `${phone.trim()}@agrobridge.app`;
+      const fakePassword = `AgroMock123!`;
 
-          if (data.user) {
-            const userProfile = {
-              id: data.user.id,
-              role: role,
-              full_name: name.trim(),
-              phone_number: `+91${phone.trim()}`
-            };
-            const { error: dbError } = await supabase.from('users').upsert(userProfile);
-            if (dbError) throw dbError;
-            setUserRole(role);
-          }
-        } else {
-          throw new Error('Please enter a valid 6-digit OTP.');
-        }
-      } else {
-        const fullPhone = `+91${phone.trim()}`;
-        const { data, error } = await supabase.auth.verifyOtp({ 
-          phone: fullPhone, 
-          token: otp, 
-          type: 'sms' 
-        });
-        if (error) throw error;
+      // 2. Sign up the user
+      const { data, error } = await supabase.auth.signUp({
+        email: fakeEmail,
+        password: fakePassword,
+      });
 
-        if (data.user) {
-          const userProfile = {
-            id: data.user.id,
-            role: role,
-            full_name: name.trim(),
-            phone_number: `+91${phone.trim()}`
-          };
-          const { error: dbError } = await supabase.from('users').upsert(userProfile);
-          if (dbError) throw dbError;
-          setUserRole(role);
+      if (error) {
+        if (error.message.includes('already registered') || error.message.includes('User already exists')) {
+          setErrors({ phone: 'This number is already registered. Please log in.' });
+          setRegistering(false);
+          return;
         }
+        throw error;
+      }
+
+      if (data.user) {
+        // Since it's a new registration, we can safely upsert
+        const userProfile = {
+          id: data.user.id,
+          role: role,
+          full_name: name.trim(),
+          phone_number: `+91${phone.trim()}`
+        };
+        const { error: dbError } = await supabase.from('users').upsert(userProfile);
+        if (dbError) throw dbError;
+        setUserProfile(userProfile);
+        setUserRole(role);
       }
     } catch (error) {
       console.error(error);
-      setErrors({ general: error.message || "Invalid OTP code." });
+      setErrors({ general: error.message || "Failed to register." });
     } finally {
       setRegistering(false);
     }

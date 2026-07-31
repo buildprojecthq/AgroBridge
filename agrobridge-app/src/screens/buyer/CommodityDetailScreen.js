@@ -30,6 +30,7 @@ export default function CommodityDetailScreen({ route, navigation }) {
   const farmerLocation = { latitude: 12.2958, longitude: 76.6394 }; // Mysuru
 
   const [loading, setLoading] = useState(true);
+  const [isChatLoading, setIsChatLoading] = useState(false);
   const [historicalData, setHistoricalData] = useState([]);
   const [chartData, setChartData] = useState({
     labels: ["Mon", "Tue", "Wed", "Thu", "Fri"],
@@ -310,9 +311,61 @@ export default function CommodityDetailScreen({ route, navigation }) {
       </ScrollView>
 
       {/* ── Sticky Action Button (Escrow Checkout) ── */}
-      <View className="absolute bottom-0 left-0 right-0 w-full bg-white px-6 py-5 border-t border-slate-200">
+      <View className="absolute bottom-0 left-0 right-0 w-full bg-white px-6 py-5 border-t border-slate-200 flex-row">
         <TouchableOpacity 
-          className="bg-green-600 rounded-full py-4 items-center shadow-lg shadow-green-900/30"
+          className="flex-1 bg-white border-2 border-green-600 rounded-full py-4 items-center mr-2 shadow-sm flex-row justify-center"
+          onPress={async () => {
+             if (isChatLoading) return;
+             setIsChatLoading(true);
+             try {
+                const userId = user?.id || user?.uid;
+                const { data: existingOrder } = await supabase
+                  .from('orders')
+                  .select('id')
+                  .eq('buyer_id', userId)
+                  .eq('crop_id', cropId)
+                  .eq('status', 'pending_payment')
+                  .maybeSingle();
+
+                if (existingOrder) {
+                  navigation.navigate('Chat', { escrowId: existingOrder.id });
+                } else {
+                  const { data: newOrder, error } = await supabase
+                    .from('orders')
+                    .insert([{
+                      buyer_id: userId,
+                      crop_id: cropId,
+                      quantity: 1,
+                      total_price: parseFloat(askingPrice) || 250,
+                      status: 'pending_payment'
+                    }])
+                    .select('id')
+                    .single();
+                  
+                  if (error) throw error;
+                  navigation.navigate('Chat', { escrowId: newOrder.id });
+                }
+             } catch (err) {
+               console.error(err);
+               alert("Failed to start chat.");
+             } finally {
+               setIsChatLoading(false);
+             }
+          }}
+          disabled={isChatLoading}
+        >
+          {isChatLoading ? (
+            <ActivityIndicator size="small" color="#16a34a" />
+          ) : (
+            <>
+              <Ionicons name="chatbubbles" size={20} color="#16a34a" style={{ marginRight: 6 }} />
+              <Text className="text-green-600 text-base font-bold font-['PlusJakartaSans_700Bold']">{t('Negotiate')}</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          className="flex-1 bg-green-600 rounded-full py-4 items-center shadow-lg shadow-green-900/30 ml-2 justify-center"
           onPress={() => {
             navigation.navigate('Checkout', { 
               cropId: cropId,
@@ -323,7 +376,7 @@ export default function CommodityDetailScreen({ route, navigation }) {
             });
           }}
         >
-          <Text className="text-white text-lg font-bold">{t('Secure Checkout')}</Text>
+          <Text className="text-white text-base font-bold font-['PlusJakartaSans_700Bold']">{t('Buy Now')}</Text>
         </TouchableOpacity>
       </View>
       

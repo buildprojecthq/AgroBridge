@@ -28,6 +28,7 @@ export default function BuyerDashboard({ navigation }) {
           .from('crops')
           .select('*')
           .gt('quantity_available', 0)
+          .neq('farmer_id', user?.id || user?.uid || '00000000-0000-0000-0000-000000000000')
           .order('created_at', { ascending: false });
 
         if (error) throw error;

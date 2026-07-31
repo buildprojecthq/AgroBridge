@@ -110,6 +110,14 @@ export default function ChatScreen({ route, navigation }) {
     const textToSend = inputText.trim();
     setInputText('');
     const userId = user?.id || user?.uid;
+
+    const optimisticMessage = {
+      id: `temp-${Date.now()}`,
+      senderId: userId,
+      text: textToSend
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       await supabase.from('messages').insert([{
         sender_id: userId,
@@ -125,6 +133,14 @@ export default function ChatScreen({ route, navigation }) {
     if (!offerPrice || isNaN(offerPrice) || !otherId) return;
     const userId = user?.id || user?.uid;
     const offerPayload = JSON.stringify({ type: 'OFFER', price: parseFloat(offerPrice) });
+    
+    const optimisticMessage = {
+      id: `temp-${Date.now()}`,
+      senderId: userId,
+      text: offerPayload
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       await supabase.from('messages').insert([{
         sender_id: userId,
@@ -258,7 +274,8 @@ export default function ChatScreen({ route, navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         {loading ? (
           <View className="flex-1 justify-center items-center">
