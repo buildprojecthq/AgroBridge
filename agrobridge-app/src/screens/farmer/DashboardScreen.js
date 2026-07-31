@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -13,18 +13,25 @@ import { MotiView } from 'moti';
 import { getLatestMandiPrice } from '../../utils/mandiPriceFetcher';
 
 export default function DashboardScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, userProfile, logout } = useAuth();
   const [temperature, setTemperature] = useState(30.0);
   const [humidity, setHumidity] = useState(68);
   const [spoilageRisk, setSpoilageRisk] = useState(2);
+  const [hasHardware, setHasHardware] = useState(false);
+  const [hardwareDeviceId, setHardwareDeviceId] = useState(null);
+  const [linkDeviceIdInput, setLinkDeviceIdInput] = useState('');
+  const [isLinking, setIsLinking] = useState(false);
+  const [hardwareRefreshTrigger, setHardwareRefreshTrigger] = useState(0);
   const { t } = useTranslation();
 
   // Bottom Sheet State
   const [isModalVisible, setModalVisible] = useState(false);
   const [modalStep, setModalStep] = useState(1);
-  const [cropForm, setCropForm] = useState({ commodity: '', state: '', market: '', weight: '', askingPrice: '', image: null });
+  const [cropForm, setCropForm] = useState({ commodity: '', state: 'Karnataka', market: '', weight: '', askingPrice: '', image: null });
   const [mandiData, setMandiData] = useState(null);
   const [isFetchingMandi, setIsFetchingMandi] = useState(false);
+  const [availableCommodities, setAvailableCommodities] = useState(['Corn', 'Tomato', 'Wheat', 'Rice', 'Onion']);
+  const [cropSearchQuery, setCropSearchQuery] = useState('');
 
   // Active Crops State
   const [activeCrops, setActiveCrops] = useState([]);
@@ -55,14 +62,23 @@ export default function DashboardScreen({ navigation }) {
 
         if (cropsError) throw cropsError;
         if (cropsData) {
-          setActiveCrops(cropsData.map(c => ({
-            id: c.id,
-            commodity: c.name,
-            askingPrice: c.price_per_kg,
-            weight: `${c.quantity_available} kg`,
-            state: 'Unknown',
-            market: 'Unknown'
-          })));
+          setActiveCrops(cropsData.map(c => {
+            let parsedState = 'Karnataka';
+            let parsedMarket = 'Unknown';
+            if (c.description && c.description.includes('Market:')) {
+              const parts = c.description.split(', ');
+              parsedState = parts[0]?.replace('State: ', '') || 'Karnataka';
+              parsedMarket = parts[1]?.replace('Market: ', '') || 'Unknown';
+            }
+            return {
+              id: c.id,
+              commodity: c.name,
+              askingPrice: c.price_per_kg,
+              weight: `${c.quantity_available} kg`,
+              state: parsedState,
+              market: parsedMarket
+            };
+          }));
         }
 
         // Fetch Earnings from Orders
@@ -83,6 +99,18 @@ export default function DashboardScreen({ navigation }) {
         }
         setTotalEarnings(earned);
         setPendingEscrow(pending);
+ 
+        // Fetch Unique Commodities for Dropdown
+        const { data: mandiPrices, error: mandiPricesError } = await supabase
+          .from('mandi_prices')
+          .select('commodity');
+
+        if (!mandiPricesError && mandiPrices) {
+          const unique = Array.from(new Set(mandiPrices.map(p => p.commodity))).sort();
+          if (unique.length > 0) {
+            setAvailableCommodities(unique);
+          }
+        }
 
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -202,56 +230,100 @@ export default function DashboardScreen({ navigation }) {
 
       setModalVisible(false);
       setModalStep(1);
-      setCropForm({ commodity: '', state: '', market: '', weight: '', askingPrice: '', image: null });
+      setCropForm({ commodity: '', state: 'Karnataka', market: '', weight: '', askingPrice: '', image: null });
       setMandiData(null);
+      setCropSearchQuery('');
     } catch (e) {
       console.error("Error saving listing: ", e);
+      Alert.alert("Error Saving Listing", e.message || String(e));
     }
   };
 
   useEffect(() => {
-    // 1. Initial fetch of the latest telemetry data
-    const fetchTelemetry = async () => {
+    const userId = user?.id || user?.uid;
+    if (!userId) return;
+
+    let telemetryChannel;
+
+    // 1. Check if user has hardware and fetch initial telemetry
+    const initHardware = async () => {
       try {
-        const { data, error } = await supabase
-          .from('storage_telemetry')
-          .select('*')
-          .order('last_updated', { ascending: false })
-          .limit(1)
+        const { data: hardware, error: hwError } = await supabase
+          .from('hardware_installations')
+          .select('device_id')
+          .eq('farmer_id', userId)
           .maybeSingle();
-          
-        if (data) {
-          setTemperature(data.current_temperature);
-          setHumidity(data.current_humidity);
-          // Converting gas_level to a percentage risk proxy for the UI
-          const riskPercentage = Math.min(Math.round((data.gas_level / 500) * 100), 100);
-          setSpoilageRisk(riskPercentage);
+
+        if (hardware && hardware.device_id) {
+          setHasHardware(true);
+          setHardwareDeviceId(hardware.device_id);
+
+          // Fetch telemetry for this specific device
+          const { data, error } = await supabase
+            .from('storage_telemetry')
+            .select('*')
+            .eq('device_id', hardware.device_id)
+            .order('last_updated', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+            
+          if (data) {
+            setTemperature(data.current_temperature);
+            setHumidity(data.current_humidity);
+            const riskPercentage = Math.min(Math.round((data.gas_level / 500) * 100), 100);
+            setSpoilageRisk(riskPercentage);
+          }
+
+          // Subscribe to real-time telemetry updates for this device
+          telemetryChannel = supabase
+            .channel(`telemetry_${hardware.device_id}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'storage_telemetry', filter: `device_id=eq.${hardware.device_id}` }, payload => {
+              console.log("🔥 REALTIME PAYLOAD RECEIVED:", payload);
+              if (payload.new && payload.new.current_temperature !== undefined) {
+                setTemperature(payload.new.current_temperature);
+                setHumidity(payload.new.current_humidity);
+                setSpoilageRisk(Math.min(Math.round((payload.new.gas_level / 500) * 100), 100));
+              }
+            })
+            .subscribe();
+        } else {
+          setHasHardware(false);
+          setHardwareDeviceId(null);
         }
       } catch (err) {
-        console.error("Failed to fetch initial telemetry", err);
+        console.error("Failed to initialize hardware logic", err);
       }
     };
-    fetchTelemetry();
+    initHardware();
 
-    // 2. Subscribe to real-time telemetry updates (upserts cause INSERT or UPDATE)
-    const telemetryChannel = supabase
-      .channel('telemetry_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'storage_telemetry' }, payload => {
-        console.log("🔥 REALTIME PAYLOAD RECEIVED:", payload);
-        if (payload.new && payload.new.current_temperature !== undefined) {
-          setTemperature(payload.new.current_temperature);
-          setHumidity(payload.new.current_humidity);
-          setSpoilageRisk(Math.min(Math.round((payload.new.gas_level / 500) * 100), 100));
-        }
-      })
-      .subscribe((status) => {
-        console.log("📡 REALTIME STATUS:", status);
-      });
-      
     return () => {
-      supabase.removeChannel(telemetryChannel);
+      if (telemetryChannel) {
+        supabase.removeChannel(telemetryChannel);
+      }
     };
-  }, []);
+  }, [user, hardwareRefreshTrigger]);
+
+  const handleLinkDevice = async () => {
+    if (!linkDeviceIdInput.trim()) return;
+    setIsLinking(true);
+    try {
+      const userId = user?.id || user?.uid;
+      const { error } = await supabase.from('hardware_installations').upsert({
+        farmer_id: userId,
+        device_id: linkDeviceIdInput.trim()
+      }, { onConflict: 'farmer_id' });
+      if (error) throw error;
+      
+      Alert.alert(t('Success'), t('Hardware linked successfully.'));
+      setLinkDeviceIdInput('');
+      setHardwareRefreshTrigger(prev => prev + 1);
+    } catch (e) {
+      console.error(e);
+      Alert.alert(t('Error'), t('Failed to link device.'));
+    } finally {
+      setIsLinking(false);
+    }
+  };
 
   const isSpoilageDetected = spoilageRisk >= 60; // Flag as dangerous if risk >= 60%
 
@@ -280,80 +352,108 @@ export default function DashboardScreen({ navigation }) {
           <View className="ml-3 mt-6">
             <View className="flex-row justify-between items-center mb-2">
               <Text className="text-white text-3xl font-bold font-['PlusJakartaSans_800ExtraBold']">
-                {t('Hello')}, {user?.displayName?.split(' ')[0] || t('Farmer')}
+                {t('Hello')}, {userProfile?.full_name?.split(' ')[0] || user?.displayName?.split(' ')[0] || t('Farmer')}
               </Text>
             </View>
             <Text className="text-emerald-100 mt-1 font-semibold opacity-90 text-sm font-['PlusJakartaSans_600SemiBold'] pr-4 flex-wrap leading-5">
-              🟢 {t('Gateway Online')} • {t('All Sensors Active')}
+              {hasHardware ? `🟢 ${t('Gateway Online')} • ${t('All Sensors Active')}` : `⚪ ${t('System Offline')} • ${t('No Hardware')}`}
             </Text>
           </View>
         </LinearGradient>
 
         <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
-          <View className="px-4 mt-6 flex-row flex-wrap justify-between">
-            
-            {/* Card 1 (Temperature) */}
-            <View 
-              className="w-[48%] bg-white rounded-3xl p-5 mb-4 border border-slate-100/50 flex-col"
-              style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
-            >
-              <View className="flex-row items-center mb-3">
-                <View className="bg-orange-50 p-2 rounded-full">
-                  <Ionicons name="thermometer" size={20} color="#ea580c" />
-                </View>
-                <Text className="text-slate-500 font-bold ml-2 text-xs">{t('Temp')}</Text>
-              </View>
-              <Text className="text-3xl text-slate-800 font-bold">
-                {temperature}
-                <Text className="text-slate-500 text-lg">°C</Text>
-              </Text>
-            </View>
-
-            {/* Card 2 (Humidity) */}
-            <View 
-              className="w-[48%] bg-white rounded-3xl p-5 mb-4 border border-slate-100/50 flex-col"
-              style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
-            >
-              <View className="flex-row items-center mb-3">
-                <View className="bg-blue-50 p-2 rounded-full">
-                  <Ionicons name="water" size={20} color="#3b82f6" />
-                </View>
-                <Text className="text-slate-500 font-bold ml-2 text-xs">{t('Humidity')}</Text>
-              </View>
-              <Text className="text-3xl text-slate-800 font-bold">
-                {humidity}
-                <Text className="text-slate-500 text-lg">%</Text>
-              </Text>
-            </View>
-
-            {/* Card 3 (Gas/Spoilage Risk) */}
-            <View 
-              className="w-full bg-white rounded-3xl p-5 mb-6 border border-slate-100/50 flex-col"
-              style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
-            >
-              <View className="flex-row items-center justify-between mb-3">
-                <View className="flex-row items-center">
-                  <View className="bg-emerald-50 p-2 rounded-full">
-                    <Ionicons name="cloud" size={20} color="#10b981" />
+          <View className="px-4 mt-6">
+            {hasHardware ? (
+              <View className="flex-row flex-wrap justify-between">
+                {/* Card 1 (Temperature) */}
+                <View 
+                  className="w-[48%] bg-white rounded-3xl p-5 mb-4 border border-slate-100/50 flex-col"
+                  style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
+                >
+                  <View className="flex-row items-center mb-3">
+                    <View className="bg-orange-50 p-2 rounded-full">
+                      <Ionicons name="thermometer" size={20} color="#ea580c" />
+                    </View>
+                    <Text className="text-slate-500 font-bold ml-2 text-xs">{t('Temp')}</Text>
                   </View>
-                  <Text className="text-slate-500 font-bold ml-2 text-sm">{t('Gas / Spoilage Risk')}</Text>
+                  <Text className="text-3xl text-slate-800 font-bold">
+                    {temperature}
+                    <Text className="text-slate-500 text-lg">°C</Text>
+                  </Text>
                 </View>
-                <Text className="text-slate-800 font-bold text-lg">{spoilageRisk} <Text className="text-slate-500 text-xs">%</Text></Text>
+
+                {/* Card 2 (Humidity) */}
+                <View 
+                  className="w-[48%] bg-white rounded-3xl p-5 mb-4 border border-slate-100/50 flex-col"
+                  style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
+                >
+                  <View className="flex-row items-center mb-3">
+                    <View className="bg-blue-50 p-2 rounded-full">
+                      <Ionicons name="water" size={20} color="#3b82f6" />
+                    </View>
+                    <Text className="text-slate-500 font-bold ml-2 text-xs">{t('Humidity')}</Text>
+                  </View>
+                  <Text className="text-3xl text-slate-800 font-bold">
+                    {humidity}
+                    <Text className="text-slate-500 text-lg">%</Text>
+                  </Text>
+                </View>
+
+                {/* Card 3 (Gas/Spoilage Risk) */}
+                <View 
+                  className="w-full bg-white rounded-3xl p-5 mb-6 border border-slate-100/50 flex-col"
+                  style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
+                >
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View className="flex-row items-center">
+                      <View className="bg-emerald-50 p-2 rounded-full">
+                        <Ionicons name="cloud" size={20} color="#10b981" />
+                      </View>
+                      <Text className="text-slate-500 font-bold ml-2 text-sm">{t('Gas / Spoilage Risk')}</Text>
+                    </View>
+                    <Text className="text-slate-800 font-bold text-lg">{spoilageRisk} <Text className="text-slate-500 text-xs">%</Text></Text>
+                  </View>
+                  
+                  {/* Green-to-Red Gradient Progress Bar */}
+                  <View className="h-2 w-full bg-slate-100 rounded-full mt-1 overflow-hidden">
+                    <LinearGradient
+                      colors={['#10b981', '#f59e0b', '#ef4444']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{ height: '100%', width: `${spoilageRisk * 10}%`, borderRadius: 9999 }}
+                    />
+                  </View>
+                  {isSpoilageDetected && (
+                    <Text className="text-red-500 text-xs font-bold mt-2 text-right">⚠️ CRITICAL LEVELS</Text>
+                  )}
+                </View>
               </View>
-              
-              {/* Green-to-Red Gradient Progress Bar */}
-              <View className="h-2 w-full bg-slate-100 rounded-full mt-1 overflow-hidden">
-                <LinearGradient
-                  colors={['#10b981', '#f59e0b', '#ef4444']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ height: '100%', width: `${spoilageRisk * 10}%`, borderRadius: 9999 }}
-                />
+            ) : (
+              <View className="bg-slate-100 rounded-3xl p-6 mb-6 border border-slate-200 border-dashed">
+                <View className="items-center mb-4">
+                  <Ionicons name="hardware-chip-outline" size={48} color="#94a3b8" style={{ marginBottom: 12 }} />
+                  <Text className="text-slate-800 font-bold text-lg mb-2 text-center font-['PlusJakartaSans_700Bold']">{t('Not yet setup hardware')}</Text>
+                  <Text className="text-slate-500 text-center font-['PlusJakartaSans_500Medium']">{t('Enter your Gateway ID to view real-time metrics.')}</Text>
+                </View>
+                
+                <View className="flex-row items-center">
+                  <TextInput 
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 mr-2"
+                    placeholder={t('e.g. demo-device-001')}
+                    value={linkDeviceIdInput}
+                    onChangeText={setLinkDeviceIdInput}
+                  />
+                  <TouchableOpacity 
+                    className="bg-green-600 px-5 py-3.5 rounded-xl items-center justify-center shadow-sm shadow-green-500/20"
+                    onPress={handleLinkDevice}
+                    disabled={isLinking || !linkDeviceIdInput.trim()}
+                    style={{ opacity: (!linkDeviceIdInput.trim() || isLinking) ? 0.5 : 1 }}
+                  >
+                    {isLinking ? <ActivityIndicator size="small" color="#fff" /> : <Text className="text-white font-bold">{t('Link')}</Text>}
+                  </TouchableOpacity>
+                </View>
               </View>
-              {isSpoilageDetected && (
-                <Text className="text-red-500 text-xs font-bold mt-2 text-right">⚠️ CRITICAL LEVELS</Text>
-              )}
-            </View>
+            )}
           </View>
 
           {/* ── New: Farmer Earnings Dashboard ── */}
@@ -430,7 +530,7 @@ export default function DashboardScreen({ navigation }) {
           </View>
 
           {/* ── Conditional Action: Exhaust Fans ── */}
-          {isSpoilageDetected && (
+          {hasHardware && isSpoilageDetected && (
             <TouchableOpacity 
               className="mx-4 bg-red-500 border-[1.5px] border-red-600 rounded-full py-4 items-center mb-6 shadow-sm shadow-red-500/30 flex-row justify-center"
               onPress={() => alert('Exhaust command sent to hardware!')}
@@ -465,132 +565,169 @@ export default function DashboardScreen({ navigation }) {
               from={{ translateY: 800 }}
               animate={{ translateY: 0 }}
               transition={{ type: 'spring', damping: 20, stiffness: 90 }}
-              className="bg-white rounded-t-[32px] px-6 pt-6 pb-10 shadow-lg"
+              className="bg-white rounded-t-[32px] px-6 pt-6 pb-10 shadow-lg max-h-[85%]"
             >
               {/* Sheet Handle */}
               <View className="w-12 h-1.5 bg-slate-200 rounded-full self-center mb-6" />
 
-              {modalStep === 1 ? (
-                <View>
-                  <Text className="text-2xl font-bold text-slate-800 mb-6">{t('Add Active Crop')}</Text>
-                  
-                  <Text className="text-slate-500 font-semibold mb-2">{t('Crop Name (Commodity)')}</Text>
-                  <TextInput 
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium mb-4"
-                    placeholder={t('e.g. Corn')}
-                    value={cropForm.commodity}
-                    onChangeText={(val) => setCropForm({ ...cropForm, commodity: val })}
-                  />
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                {modalStep === 1 ? (() => {
+                  const filteredCommodities = availableCommodities.filter(c =>
+                    c.toLowerCase().includes(cropSearchQuery.toLowerCase()) ||
+                    t(c).toLowerCase().includes(cropSearchQuery.toLowerCase())
+                  );
+                  return (
+                    <View>
+                      <Text className="text-2xl font-bold text-slate-800 mb-6">{t('Add Active Crop')}</Text>
+                      
+                      <Text className="text-slate-500 font-semibold mb-2">{t('Crop Name (Commodity)')}</Text>
+                      <TextInput 
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 font-medium mb-3 text-sm"
+                        placeholder={t('Search Crop...')}
+                        value={cropSearchQuery}
+                        onChangeText={(val) => setCropSearchQuery(val)}
+                      />
+                      <View className="mb-4">
+                        {filteredCommodities.length > 0 ? (
+                          <ScrollView 
+                            horizontal 
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ paddingVertical: 4 }}
+                          >
+                            {filteredCommodities.map((cropName) => {
+                              const isSelected = cropForm.commodity === cropName;
+                              return (
+                                <TouchableOpacity
+                                  key={cropName}
+                                  onPress={() => setCropForm({ ...cropForm, commodity: cropName })}
+                                  className={`px-4 py-2.5 rounded-xl border mr-2 ${
+                                    isSelected 
+                                      ? 'bg-green-600 border-green-600 shadow-sm shadow-green-500/20' 
+                                      : 'bg-slate-50 border-slate-200'
+                                  }`}
+                                >
+                                  <Text className={`font-semibold ${isSelected ? 'text-white' : 'text-slate-600'}`}>
+                                    {t(cropName)}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                        ) : (
+                          <Text className="text-slate-400 text-sm font-medium py-2">{t('No crops found')}</Text>
+                        )}
+                      </View>
 
-                  <Text className="text-slate-500 font-semibold mb-2">{t('State')}</Text>
-                  <TextInput 
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium mb-4"
-                    placeholder={t('e.g. Karnataka')}
-                    value={cropForm.state}
-                    onChangeText={(val) => setCropForm({ ...cropForm, state: val })}
-                  />
+                      <Text className="text-slate-500 font-semibold mb-2">{t('State')}</Text>
+                      <TextInput 
+                        className="bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-slate-400 font-medium mb-4"
+                        placeholder={t('e.g. Karnataka')}
+                        value={cropForm.state}
+                        editable={false}
+                      />
 
-                  <Text className="text-slate-500 font-semibold mb-2">{t('Market Location')}</Text>
-                  <TextInput 
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium mb-4"
-                    placeholder={t('e.g. Bengaluru')}
-                    value={cropForm.market}
-                    onChangeText={(val) => setCropForm({ ...cropForm, market: val })}
-                  />
+                      <Text className="text-slate-500 font-semibold mb-2">{t('Market Location')}</Text>
+                      <TextInput 
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium mb-4"
+                        placeholder={t('e.g. Bengaluru')}
+                        value={cropForm.market}
+                        onChangeText={(val) => setCropForm({ ...cropForm, market: val })}
+                      />
 
-                  <Text className="text-slate-500 font-semibold mb-2">{t('Total Available Weight')}</Text>
-                  <TextInput 
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium mb-4"
-                    placeholder={t('e.g. 1500 kg')}
-                    value={cropForm.weight}
-                    onChangeText={(val) => setCropForm({ ...cropForm, weight: val })}
-                  />
-                  
-                  <TouchableOpacity 
-                    className="bg-slate-50 h-32 rounded-xl items-center justify-center mb-6 border border-slate-200 border-dashed overflow-hidden" 
-                    onPress={pickImage}
-                  >
-                    {cropForm.image ? (
-                      <Image source={{ uri: cropForm.image }} className="w-full h-full rounded-xl" resizeMode="cover" />
-                    ) : (
-                      <>
-                        <Ionicons name="camera-outline" size={32} color="#64748b" />
-                        <Text className="text-slate-500 font-medium mt-2">{t('Tap to Add Photo')}</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                      <Text className="text-slate-500 font-semibold mb-2">{t('Total Available Weight')}</Text>
+                      <TextInput 
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium mb-4"
+                        placeholder={t('e.g. 1500 kg')}
+                        value={cropForm.weight}
+                        onChangeText={(val) => setCropForm({ ...cropForm, weight: val })}
+                      />
+                      
+                      <TouchableOpacity 
+                        className="bg-slate-50 h-32 rounded-xl items-center justify-center mb-6 border border-slate-200 border-dashed overflow-hidden" 
+                        onPress={pickImage}
+                      >
+                        {cropForm.image ? (
+                          <Image source={{ uri: cropForm.image }} className="w-full h-full rounded-xl" resizeMode="cover" />
+                        ) : (
+                          <>
+                            <Ionicons name="camera-outline" size={32} color="#64748b" />
+                            <Text className="text-slate-500 font-medium mt-2">{t('Tap to Add Photo')}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    className="bg-green-600 py-4 rounded-xl items-center flex-row justify-center"
-                    onPress={handleNextStep}
-                    disabled={isFetchingMandi || !cropForm.commodity || !cropForm.state || !cropForm.market || !cropForm.weight}
-                    style={{ opacity: (!cropForm.commodity || !cropForm.state || !cropForm.market || !cropForm.weight) ? 0.5 : 1 }}
-                  >
-                    {isFetchingMandi ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-lg">{t('Continue to Pricing')}</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View>
-                  <Text className="text-2xl font-bold text-slate-800 mb-6">{t('Price Strategy')}</Text>
-                  
-                  <View className="flex-row justify-between mb-8">
-                    {/* Left Box: Reference Card */}
-                    <View className="w-[48%] bg-slate-100 rounded-2xl p-4 border border-slate-200">
-                      <Text className="text-slate-500 font-semibold text-xs mb-2">{t('Govt. Mandi Price Today')}</Text>
-                      {mandiData ? (
-                        <Text className="text-slate-800 font-bold text-xl">₹{mandiData.modal_price} <Text className="text-sm">/ kg</Text></Text>
-                      ) : (
-                        <Text className="text-slate-400 font-medium text-sm">{t('Data unavailable')}</Text>
-                      )}
+                      <TouchableOpacity 
+                        className="bg-green-600 py-4 rounded-xl items-center flex-row justify-center"
+                        onPress={handleNextStep}
+                        disabled={isFetchingMandi || !cropForm.commodity || !cropForm.state || !cropForm.market || !cropForm.weight}
+                        style={{ opacity: (!cropForm.commodity || !cropForm.state || !cropForm.market || !cropForm.weight) ? 0.5 : 1 }}
+                      >
+                        {isFetchingMandi ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-bold text-lg">{t('Continue to Pricing')}</Text>}
+                      </TouchableOpacity>
                     </View>
+                  );
+                })() : (
+                  <View>
+                    <Text className="text-2xl font-bold text-slate-800 mb-6">{t('Price Strategy')}</Text>
                     
-                    {/* Right Box: Action Card */}
-                    <View 
-                      className={`w-[48%] bg-white rounded-2xl p-4 border-2 ${
-                        !cropForm.askingPrice ? 'border-slate-200' :
-                        mandiData && Number(cropForm.askingPrice) <= mandiData.modal_price ? 'border-green-500' : 'border-amber-500'
-                      }`}
-                    >
-                      <Text className="text-slate-500 font-semibold text-xs mb-2">{t('Your Asking Price')}</Text>
-                      <View className="flex-row items-center">
-                        <Text className="text-slate-800 font-bold text-xl mr-1">₹</Text>
-                        <TextInput 
-                          className="text-slate-800 font-bold text-xl flex-1"
-                          placeholder="0.00"
-                          keyboardType="numeric"
-                          value={cropForm.askingPrice}
-                          onChangeText={(val) => setCropForm({ ...cropForm, askingPrice: val })}
-                          autoFocus
-                        />
+                    <View className="flex-row justify-between mb-8">
+                      {/* Left Box: Reference Card */}
+                      <View className="w-[48%] bg-slate-100 rounded-2xl p-4 border border-slate-200">
+                        <Text className="text-slate-500 font-semibold text-xs mb-2">{t('Govt. Mandi Price Today')}</Text>
+                        {mandiData ? (
+                          <Text className="text-slate-800 font-bold text-xl">₹{mandiData.modal_price} <Text className="text-sm">/ kg</Text></Text>
+                        ) : (
+                          <Text className="text-slate-400 font-medium text-sm">{t('Data unavailable')}</Text>
+                        )}
+                      </View>
+                      
+                      {/* Right Box: Action Card */}
+                      <View 
+                        className={`w-[48%] bg-white rounded-2xl p-4 border-2 ${
+                          !cropForm.askingPrice ? 'border-slate-200' :
+                          mandiData && Number(cropForm.askingPrice) <= mandiData.modal_price ? 'border-green-500' : 'border-amber-500'
+                        }`}
+                      >
+                        <Text className="text-slate-500 font-semibold text-xs mb-2">{t('Your Asking Price')}</Text>
+                        <View className="flex-row items-center">
+                          <Text className="text-slate-800 font-bold text-xl mr-1">₹</Text>
+                          <TextInput 
+                            className="text-slate-800 font-bold text-xl flex-1"
+                            placeholder="0.00"
+                            keyboardType="numeric"
+                            value={cropForm.askingPrice}
+                            onChangeText={(val) => setCropForm({ ...cropForm, askingPrice: val })}
+                          />
+                        </View>
                       </View>
                     </View>
+
+                    {/* Dynamic Feedback UX */}
+                    {cropForm.askingPrice && mandiData && Number(cropForm.askingPrice) <= mandiData.modal_price && (
+                      <View className="bg-green-50 border border-green-200 rounded-xl p-3 mb-6 flex-row items-center">
+                        <Text className="text-green-600 font-bold">{t('Highly Competitive ⚡')}</Text>
+                      </View>
+                    )}
+
+                    {cropForm.askingPrice && mandiData && Number(cropForm.askingPrice) > mandiData.modal_price && (
+                      <View className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6">
+                        <Text className="text-amber-700 font-medium text-sm">
+                          <Text className="font-bold">{t('Premium Price.')}</Text> {t('Buyers will see your real-time IoT freshness metrics to verify quality.')}
+                        </Text>
+                      </View>
+                    )}
+
+                    <TouchableOpacity 
+                      className="bg-green-600 py-4 rounded-xl items-center"
+                      onPress={handleSaveListing}
+                      disabled={!cropForm.askingPrice}
+                      style={{ opacity: !cropForm.askingPrice ? 0.5 : 1 }}
+                    >
+                      <Text className="text-white font-bold text-lg">{t('Save Crop Listing')}</Text>
+                    </TouchableOpacity>
                   </View>
-
-                  {/* Dynamic Feedback UX */}
-                  {cropForm.askingPrice && mandiData && Number(cropForm.askingPrice) <= mandiData.modal_price && (
-                    <View className="bg-green-50 border border-green-200 rounded-xl p-3 mb-6 flex-row items-center">
-                      <Text className="text-green-600 font-bold">{t('Highly Competitive ⚡')}</Text>
-                    </View>
-                  )}
-
-                  {cropForm.askingPrice && mandiData && Number(cropForm.askingPrice) > mandiData.modal_price && (
-                    <View className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6">
-                      <Text className="text-amber-700 font-medium text-sm">
-                        <Text className="font-bold">{t('Premium Price.')}</Text> {t('Buyers will see your real-time IoT freshness metrics to verify quality.')}
-                      </Text>
-                    </View>
-                  )}
-
-                  <TouchableOpacity 
-                    className="bg-green-600 py-4 rounded-xl items-center"
-                    onPress={handleSaveListing}
-                    disabled={!cropForm.askingPrice}
-                    style={{ opacity: !cropForm.askingPrice ? 0.5 : 1 }}
-                  >
-                    <Text className="text-white font-bold text-lg">{t('Save Crop Listing')}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+                )}
+              </ScrollView>
             </MotiView>
           </KeyboardAvoidingView>
         </Modal>

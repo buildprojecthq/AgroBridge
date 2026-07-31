@@ -12,6 +12,7 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null); // Will hold 'FARMER', 'BUYER', or 'ADMIN'
+  const [userProfile, setUserProfile] = useState(null); // Database fields (full_name, etc.)
   const [language, setLanguage] = useState(null); // Language selection
   const [languageChecked, setLanguageChecked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -39,34 +40,48 @@ export const AuthProvider = ({ children }) => {
       try {
         const { data, error } = await supabase
           .from('users')
-          .select('role')
+          .select('role, full_name, phone_number, address')
           .eq('id', userId)
           .maybeSingle();
 
         if (error) {
-          console.error("Error fetching user role from Supabase:", error);
+          console.error("Error fetching user profile from Supabase:", error);
           setUserRole(null);
+          setUserProfile(null);
         } else if (data) {
           setUserRole(data.role);
+          setUserProfile(data);
+        } else {
+          // If the authenticated user has no profile record in 'public.users',
+          // automatically create one with role 'FARMER' to prevent RLS blocks
+          const defaultRole = 'FARMER';
+          console.log(`No database profile found for user ${userId}. Auto-creating with role ${defaultRole}.`);
+          const { error: upsertError } = await supabase
+            .from('users')
+            .upsert({ id: userId, role: defaultRole });
+          if (upsertError) throw upsertError;
+          setUserRole(defaultRole);
+          setUserProfile({ role: defaultRole });
         }
       } catch (error) {
         console.error("Error in profile fetch:", error);
         setUserRole(null);
+        setUserProfile(null);
       }
     };
 
     // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        fetchUserProfile(session.user.id);
-      } else {
-        setLoading(false);
+        await fetchUserProfile(session.user.id);
       }
+      setLoading(false);
     });
 
     // Listen for Supabase Auth state changes (Login / Logout)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION') return;
       setLoading(true);
       
       if (session?.user) {
@@ -76,6 +91,7 @@ export const AuthProvider = ({ children }) => {
         // Clear global states on logout
         setUser(null);
         setUserRole(null);
+        setUserProfile(null);
       }
       
       setLoading(false);
@@ -108,7 +124,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userRole, loading, language, languageChecked, setLanguage: changeAppLanguage, setUserRole, logout }}>
+    <AuthContext.Provider value={{ user, userRole, userProfile, loading, language, languageChecked, setLanguage: changeAppLanguage, setUserRole, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';

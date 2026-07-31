@@ -7,10 +7,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { scheduleLocalNotification } from '../../utils/notifications';
+import { translateCropName } from '../../utils/translate';
 
 export default function InboxScreen({ navigation }) {
   const { user, userRole } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [escrows, setEscrows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,60 +21,50 @@ export default function InboxScreen({ navigation }) {
     const userId = user?.id || user?.uid;
     if (!userId) return;
 
-    const verifyPayment = async (orderId) => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
 
-        const { data, error } = await supabase.functions.invoke('cashfree-integration', {
-          body: {
-            action: 'verifyPayment',
-            data: { orderId }
-          },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`
-          }
-        });
-
-        if (data?.success) {
-          fetchOrders();
-        }
-      } catch (e) {
-        console.error("Verification error for order:", orderId, e);
-      }
-    };
 
     const fetchOrders = async () => {
       try {
-        let q;
+        let combinedData = [];
+        
         if (isBuyer) {
-          q = supabase.from('orders').select('*, crops(name, farmer_id)').eq('buyer_id', userId).order('created_at', { ascending: false });
+          const { data, error } = await supabase.from('orders').select('*, crops(name, farmer_id)').eq('buyer_id', userId).order('created_at', { ascending: false });
+          if (error) throw error;
+          if (data) combinedData = data;
         } else {
-          q = supabase.from('orders').select('*, crops!inner(name, farmer_id)').eq('crops.farmer_id', userId).order('created_at', { ascending: false });
+          // Fetch Sales
+          const { data: sales, error: err1 } = await supabase.from('orders').select('*, crops!inner(name, farmer_id)').eq('crops.farmer_id', userId).order('created_at', { ascending: false });
+          if (err1) throw err1;
+          
+          // Fetch Purchases
+          const { data: purchases, error: err2 } = await supabase.from('orders').select('*, crops(name, farmer_id)').eq('buyer_id', userId).order('created_at', { ascending: false });
+          if (err2) throw err2;
+          
+          let allOrders = [...(sales || []), ...(purchases || [])];
+          
+          // Deduplicate in case a farmer buys their own crop (edge case)
+          const uniqueMap = new Map();
+          allOrders.forEach(item => uniqueMap.set(item.id, item));
+          combinedData = Array.from(uniqueMap.values());
+          
+          combinedData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         }
 
-        const { data, error } = await q;
-        
-        if (error) throw error;
-        
-        if (data) {
-          const activeEscrows = data.map(order => ({
-            id: order.id,
-            status: order.status,
-            agreedPrice: order.total_price,
-            cropName: order.crops?.name || 'Crop',
-            buyerId: order.buyer_id
+        if (combinedData.length > 0) {
+          const currentLang = i18n.language || 'en';
+          const activeEscrows = await Promise.all(combinedData.map(async (order) => {
+            const translatedCrop = await translateCropName(order.crops?.name || 'Crop', currentLang);
+            return {
+              id: order.id,
+              status: order.status,
+              agreedPrice: order.total_price,
+              cropName: translatedCrop,
+              buyerId: order.buyer_id
+            };
           }));
           setEscrows(activeEscrows);
-
-          // Auto-verify any pending payments for the buyer
-          if (isBuyer) {
-            data.forEach(order => {
-              if (order.status === 'pending_payment') {
-                verifyPayment(order.id);
-              }
-            });
-          }
+        } else {
+          setEscrows([]);
         }
       } catch (error) {
         console.error("Supabase Error in InboxScreen:", error);
@@ -106,15 +97,10 @@ export default function InboxScreen({ navigation }) {
       
       if (sessionError || !session) throw new Error('Not authenticated');
 
-      const { data, error } = await supabase.functions.invoke('cashfree-integration', {
-        body: {
-          action: 'releaseEscrow',
-          data: { orderId: orderId }
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
-      });
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'completed' })
+        .eq('id', orderId);
 
       if (error) throw error;
       
@@ -176,7 +162,7 @@ export default function InboxScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* Action Button for Buyer to Release Funds */}
-        {isBuyer && item.status === "escrow_locked" && (
+        {(item.buyerId === (user?.id || user?.uid)) && item.status === "escrow_locked" && (
           <TouchableOpacity 
             className="mt-3 bg-emerald-600 py-3 rounded-xl items-center flex-row justify-center"
             onPress={() => handleReleaseEscrow(item.id)}

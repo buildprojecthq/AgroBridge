@@ -44,11 +44,23 @@ export default function ChatScreen({ route, navigation }) {
           cropName: orderData.crops?.name || 'Crop'
         });
         
-        const targetOtherId = userRole === 'BUYER' ? orderData.crops?.farmer_id : orderData.buyer_id;
+        const isCurrentUserBuyer = orderData.buyer_id === userId;
+        const targetOtherId = isCurrentUserBuyer ? orderData.crops?.farmer_id : orderData.buyer_id;
         setOtherId(targetOtherId);
 
         // Fetch Messages
         if (targetOtherId) {
+          const { data: otherUserData } = await supabase
+            .from('users')
+            .select('full_name')
+            .eq('id', targetOtherId)
+            .maybeSingle();
+
+          setEscrow(prev => ({
+            ...prev,
+            otherUserName: otherUserData?.full_name || 'User'
+          }));
+
           const { data: msgData } = await supabase
             .from('messages')
             .select('*')
@@ -184,10 +196,10 @@ export default function ChatScreen({ route, navigation }) {
   // Determine Dynamic Header UI based on Escrow Status
   let statusColor = "bg-amber-500";
   let statusText = t("Escrow Initiated");
-  if (escrow.status === "FUNDS_LOCKED") {
+  if (escrow.status === "escrow_locked") {
     statusColor = "bg-blue-500";
     statusText = t("Payment Secured");
-  } else if (escrow.status === "COMPLETED") {
+  } else if (escrow.status === "completed") {
     statusColor = "bg-green-500";
     statusText = t("Delivery Confirmed");
   }
@@ -207,29 +219,36 @@ export default function ChatScreen({ route, navigation }) {
 
         <View className="px-6 mt-2">
           <Text className="text-slate-800 font-bold text-2xl mb-1">₹{escrow.agreedPrice}</Text>
-          <Text className="text-slate-500 font-medium mb-4">{t('Negotiating:')} {t(escrow.cropName)}</Text>
+          <Text className="text-slate-500 font-medium mb-4">{t('Negotiating with')} <Text className="font-bold text-slate-800">{escrow.otherUserName}</Text> ({t(escrow.cropName)})</Text>
 
-          {userRole === 'BUYER' && escrow.status === 'AWAITING_PAYMENT' && (
+          {(escrow.buyerId === (user?.id || user?.uid)) && escrow.status === 'pending_payment' && (
             <TouchableOpacity 
               className="bg-green-600 py-3 rounded-xl items-center flex-row justify-center"
-              onPress={() => updateEscrowStatus('FUNDS_LOCKED')}
+              onPress={() => updateEscrowStatus('escrow_locked')}
             >
               <Ionicons name="lock-closed" size={18} color="#fff" style={{ marginRight: 8 }} />
               <Text className="text-white font-bold text-base">{t('Secure Payment via Escrow')}</Text>
             </TouchableOpacity>
           )}
 
-          {userRole === 'FARMER' && escrow.status === 'FUNDS_LOCKED' && (
+          {(escrow.buyerId === (user?.id || user?.uid)) && escrow.status === 'escrow_locked' && (
             <TouchableOpacity 
               className="bg-blue-600 py-3 rounded-xl items-center flex-row justify-center"
-              onPress={() => updateEscrowStatus('COMPLETED')}
+              onPress={() => updateEscrowStatus('completed')}
             >
               <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
               <Text className="text-white font-bold text-base">{t('Confirm Delivery & Release Funds')}</Text>
             </TouchableOpacity>
           )}
 
-          {escrow.status === 'COMPLETED' && (
+          {(escrow.buyerId !== (user?.id || user?.uid)) && escrow.status === 'escrow_locked' && (
+            <View className="bg-amber-100 py-3 rounded-xl items-center flex-row justify-center border border-amber-300">
+              <Ionicons name="time" size={18} color="#b45309" style={{ marginRight: 8 }} />
+              <Text className="text-amber-700 font-bold text-base">{t('Awaiting Buyer Delivery Confirmation')}</Text>
+            </View>
+          )}
+
+          {escrow.status === 'completed' && (
             <View className="bg-slate-100 py-3 rounded-xl items-center">
               <Text className="text-slate-600 font-bold">{t('Transaction Successfully Closed')}</Text>
             </View>
@@ -289,7 +308,7 @@ export default function ChatScreen({ route, navigation }) {
                     </View>
                     <Text className="text-slate-800 text-2xl font-bold mb-3 font-['PlusJakartaSans_800ExtraBold']">₹{offerData.price}</Text>
                     
-                    {!isMyMessage && escrow.status === 'AWAITING_PAYMENT' && (
+                    {!isMyMessage && escrow.status === 'pending_payment' && (
                       <View className="flex-row">
                         <TouchableOpacity className="flex-1 bg-emerald-600 py-2.5 rounded-xl items-center mr-2 shadow-sm" onPress={() => acceptOffer(offerData.price)}>
                           <Text className="text-white font-bold font-['PlusJakartaSans_700Bold']">{t('Accept')}</Text>
@@ -318,7 +337,7 @@ export default function ChatScreen({ route, navigation }) {
           />
         )}
 
-        {escrow.status !== 'COMPLETED' && (
+        {escrow.status !== 'completed' && (
           <View>
             {isProposing ? (
               <View className="px-4 py-4 bg-white border-t border-slate-100 flex-row items-center shadow-lg">
@@ -340,7 +359,7 @@ export default function ChatScreen({ route, navigation }) {
               </View>
             ) : (
               <View className="flex-row p-3 bg-white border-t border-slate-100 items-center px-4">
-                {escrow.status === 'AWAITING_PAYMENT' && (
+                {escrow.status === 'pending_payment' && (
                   <TouchableOpacity onPress={() => setIsProposing(true)} className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 items-center justify-center mr-3 shadow-sm">
                     <Ionicons name="pricetag" size={20} color="#d97706" />
                   </TouchableOpacity>

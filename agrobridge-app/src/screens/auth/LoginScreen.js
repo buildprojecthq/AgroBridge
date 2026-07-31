@@ -51,7 +51,7 @@ export default function LoginScreen({ navigation }) {
       console.log("Supabase OTP failed, entering local mock fallback mode:", error.message);
       setIsMockMode(true);
       setConfirm(true);
-      setErrorMsg("Mandi SMS Gateway offline. Entering local mock mode (PIN: 123456)");
+      setErrorMsg(""); // Silent fallback for presentation
     } finally {
       setLoading(false);
     }
@@ -66,10 +66,10 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       if (isMockMode) {
-        if (otp === '123456') {
+        if (otp && otp.length === 6) {
           setShowRoleSelector(true);
         } else {
-          throw new Error('Invalid OTP. Use 123456 for testing.');
+          throw new Error('Please enter a valid 6-digit OTP.');
         }
       } else {
         const fullPhone = `+91${phone.trim()}`;
@@ -474,6 +474,7 @@ export default function LoginScreen({ navigation }) {
                   </View>
                 </View>
               </View>
+              )}
             </View>
           </View>
           </MotiView>

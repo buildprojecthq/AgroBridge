@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Text, View, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Switch } from 'react-native';
+import { Text, View, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, Modal } from 'react-native';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 export default function CheckoutScreen({ route, navigation }) {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const { t } = useTranslation();
   
   // Default values to prevent crash if accessed directly from details page
@@ -21,6 +21,17 @@ export default function CheckoutScreen({ route, navigation }) {
   const [quantity, setQuantity] = useState(initialQty);
   const [escrowEnabled, setEscrowEnabled] = useState(true);
   const [processing, setProcessing] = useState(false);
+  
+  const [shippingAddress, setShippingAddress] = useState(userProfile?.address || '70 Washington Square South, New York, NY 10012, United States');
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [instructionsModalVisible, setInstructionsModalVisible] = useState(false);
+  const [tempInstructions, setTempInstructions] = useState('');
+
+  React.useEffect(() => {
+    if (userProfile?.address) {
+      setShippingAddress(userProfile.address);
+    }
+  }, [userProfile]);
 
   // Dynamic invoice calculations matching mockup
   const basePrice = pricePerKg * quantity;
@@ -56,37 +67,16 @@ export default function CheckoutScreen({ route, navigation }) {
         if (orderData) newOrderId = orderData.id;
       }
 
-      // 2. Call the Edge Function to generate the Cashfree Checkout URL
-      const { data, error } = await supabase.functions.invoke('cashfree-integration', {
-        body: {
-          action: 'createEscrowPayment',
-          data: {
-            amount: totalAmount,
-            cropId: cropId === 'mock-id' ? '00000000-0000-0000-0000-000000000000' : cropId,
-            orderId: newOrderId,
-            returnUrl: Linking.createURL('Inbox')
-          }
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+      // 2. Navigate to Mock Payment Screen
+      navigation.navigate('MockPayment', {
+        orderId: newOrderId,
+        amount: totalAmount,
+        cropId: cropId === 'mock-id' ? '00000000-0000-0000-0000-000000000000' : cropId,
+        quantityPurchased: quantity
       });
-
-      if (error || !data?.url) {
-        throw error || new Error('Failed to generate Cashfree checkout URL');
-      }
-
-      // 3. Open the Secure Cashfree Checkout page in the mobile browser
-      Linking.openURL(data.url);
-
-      Alert.alert(
-        t("Redirecting to Cashfree UPI"),
-        t(`Please complete your UPI or card payment. Once done, you will return to the Inbox.`),
-        [{ text: t("OK"), onPress: () => navigation.navigate('BuyerHome') }]
-      );
     } catch (error) {
       console.error("Checkout Error:", error);
-      Alert.alert(t("Transaction Failed"), t("Could not connect to Cashfree. Ensure your Edge Function is deployed."));
+      Alert.alert(t("Transaction Failed"), error.message || String(error));
     } finally {
       setProcessing(false);
     }
@@ -94,7 +84,15 @@ export default function CheckoutScreen({ route, navigation }) {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1 px-5 pt-4 pb-32" showsVerticalScrollIndicator={false}>
+      {/* ── Sticky Back Button ── */}
+      <TouchableOpacity 
+        className="absolute top-12 left-5 p-2 bg-slate-100 rounded-full z-50 shadow-sm border border-slate-200" 
+        onPress={() => navigation.goBack()}
+      >
+        <Ionicons name="arrow-back" size={20} color="#334155" />
+      </TouchableOpacity>
+
+      <ScrollView className="flex-1 px-5 pt-16 pb-32" showsVerticalScrollIndicator={false}>
         
         {/* Item Card */}
         <View className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 flex-row items-center justify-between">
@@ -104,9 +102,6 @@ export default function CheckoutScreen({ route, navigation }) {
             </View>
             <View className="flex-1">
               <Text className="text-lg font-medium text-slate-800">{t(cropType)}</Text>
-              <TouchableOpacity className="mt-1">
-                <Text className="text-green-700 text-xs font-semibold underline">{t('Add more items')}</Text>
-              </TouchableOpacity>
             </View>
           </View>
           
@@ -130,10 +125,7 @@ export default function CheckoutScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Apply Coupon */}
-        <TouchableOpacity className="bg-white rounded-xl py-4 px-4 border border-slate-100 mb-6 shadow-sm flex-row items-center justify-between">
-          <Text className="text-green-700 font-bold text-sm">{t('Apply Coupon')}</Text>
-        </TouchableOpacity>
+
 
         {/* Invoice */}
         <Text className="text-slate-600 text-sm mb-2">{t('Invoice')}</Text>
@@ -162,29 +154,71 @@ export default function CheckoutScreen({ route, navigation }) {
 
         {/* Shipping Details */}
         <View className="flex-row justify-between items-center mb-2 mt-2">
-          <Text className="text-slate-600 text-sm">{t('Shipping Details')}</Text>
-          <TouchableOpacity>
-            <Text className="text-slate-500 text-sm">{t('Edit')}</Text>
-          </TouchableOpacity>
+          <Text className="text-slate-600 text-sm font-bold">{t('Shipping Address')}</Text>
         </View>
         <View className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4">
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-slate-800 font-medium text-base">Michael Miller</Text>
-            <View className="flex-row items-center">
-              <Text className="text-green-700 text-xs font-semibold mr-1">{t('Home')}</Text>
-              <Ionicons name="chevron-down" size={14} color="#15803d" />
-            </View>
-          </View>
-          <Text className="text-slate-500 text-sm leading-5 mb-3">
-            70 Washington Square South, New York, NY 10012, United States
-          </Text>
-          <Text className="text-slate-500 text-sm">+91 12345 67890</Text>
+          <TextInput
+            className="text-slate-600 text-sm leading-5"
+            multiline
+            value={shippingAddress}
+            onChangeText={setShippingAddress}
+            placeholder={t('Enter your full address')}
+          />
         </View>
 
         {/* Add Delivery Instructions */}
-        <TouchableOpacity className="bg-white rounded-xl py-4 px-4 border border-slate-100 mb-10 shadow-sm">
-          <Text className="text-green-700 font-bold text-sm">{t('Add Delivery Instructions')}</Text>
+        <TouchableOpacity 
+          className="bg-white rounded-xl py-4 px-4 border border-slate-100 mb-10 shadow-sm"
+          onPress={() => {
+            setTempInstructions(deliveryInstructions);
+            setInstructionsModalVisible(true);
+          }}
+        >
+          {deliveryInstructions ? (
+            <Text className="text-slate-600 text-sm font-medium">{deliveryInstructions}</Text>
+          ) : (
+            <Text className="text-green-700 font-bold text-sm">{t('Add Delivery Instructions')}</Text>
+          )}
         </TouchableOpacity>
+        
+        {/* Instructions Modal */}
+        <Modal
+          visible={instructionsModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setInstructionsModalVisible(false)}
+        >
+          <View className="flex-1 bg-black/40 justify-center items-center px-6">
+            <View className="bg-white w-full rounded-3xl p-6 shadow-xl">
+              <Text className="text-lg font-bold text-slate-800 mb-4">{t('Delivery Instructions')}</Text>
+              <TextInput
+                className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-700 h-32"
+                multiline
+                textAlignVertical="top"
+                placeholder={t('E.g. Leave at the front gate')}
+                value={tempInstructions}
+                onChangeText={setTempInstructions}
+              />
+              <View className="flex-row justify-end mt-4">
+                <TouchableOpacity 
+                  className="px-4 py-2 mr-2"
+                  onPress={() => setInstructionsModalVisible(false)}
+                >
+                  <Text className="text-slate-500 font-bold">{t('Cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  className="bg-green-600 px-6 py-2 rounded-xl"
+                  onPress={() => {
+                    setDeliveryInstructions(tempInstructions);
+                    setInstructionsModalVisible(false);
+                  }}
+                >
+                  <Text className="text-white font-bold">{t('Save')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         
         <View style={{ height: 40 }} />
       </ScrollView>

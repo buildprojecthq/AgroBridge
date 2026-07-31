@@ -3,6 +3,9 @@ CREATE TABLE IF NOT EXISTS public.users (
   id UUID REFERENCES auth.users NOT NULL PRIMARY KEY,
   stripeAccountId TEXT,
   role TEXT,
+  full_name TEXT,
+  phone_number TEXT,
+  address TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -42,6 +45,30 @@ TO authenticated
 USING (true);
 
 -- Note: The Edge Function will bypass RLS by using the Service Role key to insert data.
+
+-- Hardware Installations mapping
+CREATE TABLE IF NOT EXISTS public.hardware_installations (
+  farmer_id UUID REFERENCES public.users(id) NOT NULL PRIMARY KEY,
+  device_id TEXT NOT NULL UNIQUE,
+  installed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.hardware_installations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read their own hardware installations" 
+ON public.hardware_installations 
+FOR SELECT 
+USING (auth.uid() = farmer_id);
+
+CREATE POLICY "Users can insert their own hardware installations" 
+ON public.hardware_installations 
+FOR INSERT 
+WITH CHECK (auth.uid() = farmer_id);
+
+CREATE POLICY "Users can update their own hardware installations" 
+ON public.hardware_installations 
+FOR UPDATE 
+USING (auth.uid() = farmer_id);
 
 -----------------------------------------------------------
 -- CROPS TABLE (Marketplace Listings)
@@ -112,19 +139,29 @@ USING (
   )
 );
 
--- Buyers can create orders
-CREATE POLICY "Buyers can insert orders" 
+-- Buyers and Farmers can create orders
+CREATE POLICY "Users can insert orders" 
 ON public.orders FOR INSERT 
 WITH CHECK (
   auth.uid() = buyer_id
-  AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('BUYER', 'GUEST_BUYER'))
+  AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('BUYER', 'GUEST_BUYER', 'FARMER', 'GUEST_FARMER'))
 );
 
 -- Note: Status updates to orders (like 'shipped' -> 'delivered') will need policies depending on business logic. 
--- For now, letting buyers update their own orders (e.g. mark delivered).
+-- Buyers can update their own orders (e.g. mark delivered).
 CREATE POLICY "Buyers can update own orders" 
 ON public.orders FOR UPDATE 
 USING (auth.uid() = buyer_id);
+
+-- Farmers can update orders for their own crops (e.g. mark shipped, accept escrow)
+CREATE POLICY "Farmers can update orders for their crops"
+ON public.orders FOR UPDATE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.crops 
+    WHERE crops.id = orders.crop_id AND crops.farmer_id = auth.uid()
+  )
+);
 
 -----------------------------------------------------------
 -- MESSAGES TABLE (Real-time Chat)
@@ -148,3 +185,19 @@ USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 CREATE POLICY "Users can insert messages" 
 ON public.messages FOR INSERT 
 WITH CHECK (auth.uid() = sender_id);
+
+-----------------------------------------------------------
+-- FUNCTIONS & RPCs
+-----------------------------------------------------------
+-- Secure function to decrement crop quantity without exposing UPDATE to buyers
+CREATE OR REPLACE FUNCTION decrement_crop_quantity(crop_id_param UUID, qty_to_deduct NUMERIC)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.crops
+  SET quantity_available = GREATEST(0, quantity_available - qty_to_deduct)
+  WHERE id = crop_id_param;
+END;
+$$;

@@ -6,10 +6,11 @@ import { useAuth } from '../../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../config/supabase';
+import { translateCropName } from '../../utils/translate';
 
 export default function BuyerDashboard({ navigation }) {
-  const { logout } = useAuth();
-  const { t } = useTranslation();
+  const { user, userProfile, logout } = useAuth();
+  const { t, i18n } = useTranslation();
   const [sortBy, setSortBy] = useState('distance');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -26,22 +27,28 @@ export default function BuyerDashboard({ navigation }) {
         const { data, error } = await supabase
           .from('crops')
           .select('*')
+          .gt('quantity_available', 0)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
 
         if (data) {
-          const activeListings = data.map((crop) => ({
-            id: crop.id,
-            farm: `Farm ${crop.farmer_id.substring(0, 4)}`, // Fallback display name
-            distance: `${Math.floor(Math.random() * 50) + 5} km away`, // Simulated distance
-            price: `₹${crop.price_per_kg}`,
-            rawPrice: crop.price_per_kg,
-            available: `${crop.quantity_available} kg`,
-            trend: Math.random() > 0.5 ? 'up' : 'down',
-            farmerId: crop.farmer_id,
-            commodity: crop.name,
-            imageUrl: crop.image_url
+          const currentLang = i18n.language || 'en';
+          const activeListings = await Promise.all(data.map(async (crop) => {
+            const translatedCommodity = await translateCropName(crop.name, currentLang);
+            return {
+              id: crop.id,
+              farm: `Farm ${crop.farmer_id.substring(0, 4)}`, // Fallback display name
+              distance: `${Math.floor(Math.random() * 50) + 5} km away`, // Simulated distance
+              price: `₹${crop.price_per_kg}`,
+              rawPrice: crop.price_per_kg,
+              available: `${crop.quantity_available} kg`,
+              trend: Math.random() > 0.5 ? 'up' : 'down',
+              farmerId: crop.farmer_id,
+              commodity: translatedCommodity,
+              originalCommodity: crop.name,
+              imageUrl: crop.image_url
+            };
           }));
           setListings(activeListings);
         }
@@ -66,8 +73,23 @@ export default function BuyerDashboard({ navigation }) {
     };
   }, []);
 
+  // Category filtering logic
+  const categoryKeywords = {
+    Grains: ['wheat', 'rice', 'corn', 'maize', 'grain'],
+    Vegetables: ['tomato', 'potato', 'onion', 'carrot', 'cabbage', 'vegetable'],
+    Fruits: ['apple', 'banana', 'mango', 'orange', 'pomegranate', 'fruit'],
+    Spices: ['chili', 'pepper', 'turmeric', 'ginger', 'spice']
+  };
+
+  const filteredListings = listings.filter((listing) => {
+    if (activeCategory === 'All') return true;
+    const keywords = categoryKeywords[activeCategory] || [];
+    const commodityLower = (listing.originalCommodity || listing.commodity).toLowerCase();
+    return keywords.some(kw => commodityLower.includes(kw));
+  });
+
   // Sort the live listings based on the selected toggle
-  const sortedListings = [...listings].sort((a, b) => {
+  const sortedListings = [...filteredListings].sort((a, b) => {
     if (sortBy === 'price') {
       // Extract the base price number from strings like '₹260 - ₹280'
       const priceA = parseInt(a.price.replace(/[^0-9]/g, '').substring(0, 3), 10);
@@ -101,6 +123,9 @@ export default function BuyerDashboard({ navigation }) {
           }}
         >
           <View className="ml-3 mt-2">
+            <Text className="text-emerald-100 font-bold mb-1 font-['PlusJakartaSans_700Bold']">
+              {t('Hello')}, {userProfile?.full_name?.split(' ')[0] || user?.displayName?.split(' ')[0] || t('Buyer')}
+            </Text>
             <Text className="text-white text-3xl font-bold font-['PlusJakartaSans_800ExtraBold']">{t('Marketplace')}</Text>
             <Text className="text-emerald-100 font-medium opacity-90 font-['PlusJakartaSans_500Medium'] mt-1">{t('Discover fresh crops from verified farms')}</Text>
           </View>

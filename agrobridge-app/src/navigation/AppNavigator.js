@@ -14,6 +14,7 @@ import BuyerDashboard from '../screens/buyer/BuyerDashboard';
 import CommodityDetailScreen from '../screens/buyer/CommodityDetailScreen';
 import ChatScreen from '../screens/ChatScreen';
 import CheckoutScreen from '../screens/buyer/CheckoutScreen';
+import MockPaymentScreen from '../screens/buyer/MockPaymentScreen';
 import LanguageSelectionScreen from '../screens/LanguageSelectionScreen';
 import MainTabNavigator from './MainTabNavigator';
 
@@ -31,9 +32,13 @@ export default function AppNavigator() {
     }
   }, [loading, languageChecked]);
 
-  // Optionally keep a minimal fade/loading state for deep link transitions, but skip the flash
+  // Show a minimal loading state for deep link transitions and auth state changes to prevent black screens
   if (loading || !languageChecked) {
-    return null; // Don't show ActivityIndicator, let the native splash screen hold it
+    return (
+      <View style={{ flex: 1, backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#10b981" />
+      </View>
+    );
   }
 
   const linking = {
@@ -68,6 +73,7 @@ export default function AppNavigator() {
             <Stack.Screen name="CommodityDetail" component={CommodityDetailScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Checkout" component={CheckoutScreen} />
+            <Stack.Screen name="MockPayment" component={MockPaymentScreen} />
             <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
           </>
         )}
