@@ -7,6 +7,7 @@ import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 
 export default function CropUploadScreen({ navigation }) {
   const { user } = useAuth();
@@ -87,7 +88,13 @@ export default function CropUploadScreen({ navigation }) {
 
       if (dbError) throw dbError;
 
-      Alert.alert("Success!", `${cropType} has been listed on the marketplace.`);
+      Toast.show({
+        type: 'success',
+        text1: 'Success!',
+        text2: `${cropType} has been listed on the marketplace.`,
+        position: 'bottom',
+        bottomOffset: 100
+      });
 
       // 5. Reset form and navigate back to Dashboard
       setCropType('');

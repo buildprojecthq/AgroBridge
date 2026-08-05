@@ -19,6 +19,8 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { registerForPushNotificationsAsync } from './src/utils/notifications';
 
+import Toast from 'react-native-toast-message';
+
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
@@ -67,6 +69,7 @@ export default function App() {
       <AuthProvider>
         <AppNavigator />
       </AuthProvider>
+      <Toast />
     </SafeAreaProvider>
   );
 }

@@ -10,12 +10,21 @@ export default function MockPaymentScreen({ route, navigation }) {
   const { orderId, amount, cropId, quantityPurchased } = route.params;
   const [status, setStatus] = useState('idle'); // idle, processing, success, error
 
-  const handlePayment = async () => {
+  const handlePayment = async (isSuccess = true) => {
     setStatus('processing');
     
     // Simulate network delay for realistic feel
     setTimeout(async () => {
       try {
+        if (!isSuccess) {
+          // Update order status to payment_failed
+          await supabase
+            .from('orders')
+            .update({ status: 'payment_failed' })
+            .eq('id', orderId);
+          throw new Error('Bank declined the transaction. Insufficient funds or invalid card.');
+        }
+
         // Mock successful payment: Update order status to escrow_locked directly
         const { error: orderError } = await supabase
           .from('orders')
@@ -72,12 +81,20 @@ export default function MockPaymentScreen({ route, navigation }) {
       </View>
 
       {status === 'idle' || status === 'error' ? (
-        <TouchableOpacity 
-          className="bg-emerald-600 py-4 rounded-2xl items-center shadow-lg shadow-emerald-900/30"
-          onPress={handlePayment}
-        >
-          <Text className="text-white font-bold text-lg">Pay ₹{amount.toLocaleString('en-IN')}</Text>
-        </TouchableOpacity>
+        <View className="gap-4">
+          <TouchableOpacity 
+            className="bg-emerald-600 py-4 rounded-2xl items-center shadow-lg shadow-emerald-900/30"
+            onPress={() => handlePayment(true)}
+          >
+            <Text className="text-white font-bold text-lg">Simulate Successful Payment</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            className="bg-rose-50 border border-rose-200 py-4 rounded-2xl items-center shadow-sm"
+            onPress={() => handlePayment(false)}
+          >
+            <Text className="text-rose-600 font-bold text-lg">Simulate Failed Payment</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {status === 'processing' && (

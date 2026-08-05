@@ -70,18 +70,8 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    // Check current session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        await fetchUserProfile(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    // Listen for Supabase Auth state changes (Login / Logout)
+    // Listen for Supabase Auth state changes (Login / Logout / Init)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'INITIAL_SESSION') return;
       setLoading(true);
       
       if (session?.user) {
