@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import NetInfo from '@react-native-community/netinfo';
 
 // Create the Context
 const AuthContext = createContext({});
@@ -44,13 +45,14 @@ export const AuthProvider = ({ children }) => {
           .eq('id', userId)
           .maybeSingle();
 
+        let updatedRole = null;
+        let updatedProfile = null;
+
         if (error) {
           console.error("Error fetching user profile from Supabase:", error);
-          setUserRole(null);
-          setUserProfile(null);
         } else if (data) {
-          setUserRole(data.role);
-          setUserProfile(data);
+          updatedRole = data.role;
+          updatedProfile = data;
         } else {
           // If the authenticated user has no profile record in 'public.users',
           // automatically create one with role 'FARMER' to prevent RLS blocks
@@ -60,13 +62,21 @@ export const AuthProvider = ({ children }) => {
             .from('users')
             .upsert({ id: userId, role: defaultRole });
           if (upsertError) throw upsertError;
-          setUserRole(defaultRole);
-          setUserProfile({ role: defaultRole });
+          updatedRole = defaultRole;
+          updatedProfile = { role: defaultRole };
+        }
+
+        if (updatedRole) {
+          setUserRole(updatedRole);
+          setUserProfile(updatedProfile);
+          // Cache the profile for offline mode / optimistic loading
+          await AsyncStorage.setItem('@user_role', updatedRole);
+          if (updatedProfile) {
+            await AsyncStorage.setItem('@user_profile', JSON.stringify(updatedProfile));
+          }
         }
       } catch (error) {
         console.error("Error in profile fetch:", error);
-        setUserRole(null);
-        setUserProfile(null);
       }
     };
 
@@ -76,15 +86,51 @@ export const AuthProvider = ({ children }) => {
       
       if (session?.user) {
         setUser(session.user);
-        await fetchUserProfile(session.user.id);
+        
+        // 1. Optimistic UI: Load from cache first
+        try {
+          const cachedRole = await AsyncStorage.getItem('@user_role');
+          const cachedProfileStr = await AsyncStorage.getItem('@user_profile');
+          if (cachedRole) {
+            setUserRole(cachedRole);
+          }
+          if (cachedProfileStr) {
+            setUserProfile(JSON.parse(cachedProfileStr));
+          }
+        } catch (cacheError) {
+          console.error("Error loading cached profile:", cacheError);
+        }
+
+        // Unblock UI immediately so user can enter the app using cached data
+        setLoading(false);
+
+        // 2. Network Detection: Only fetch if we have internet
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected) {
+          // Wrap fetch in a timeout promise to prevent hangups if network is degraded
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+          );
+          
+          Promise.race([
+            fetchUserProfile(session.user.id),
+            timeoutPromise
+          ]).catch(err => {
+            console.log("Background sync skipped or timed out:", err.message);
+          });
+        } else {
+          console.log("Offline mode: Skipped background profile sync");
+        }
+
       } else {
         // Clear global states on logout
         setUser(null);
         setUserRole(null);
         setUserProfile(null);
+        await AsyncStorage.removeItem('@user_role');
+        await AsyncStorage.removeItem('@user_profile');
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
     return () => {
