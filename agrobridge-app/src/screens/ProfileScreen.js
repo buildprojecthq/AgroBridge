@@ -156,9 +156,9 @@ export default function ProfileScreen({ navigation }) {
           </View>
         ) : (
           <>
-            <Text className="text-xl font-bold text-gray-800" style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{form.full_name || "AgroBridge User"}</Text>
-            <Text className="text-gray-500 mb-2" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>{form.phone_number || "No phone number"}</Text>
-            <Text className="text-gray-400 mb-6 text-center px-4" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>{form.address || "No address added"}</Text>
+            <Text className="text-xl font-bold text-gray-800" style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{form.full_name || t("AgroBridge User")}</Text>
+            <Text className="text-gray-500 mb-2" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>{form.phone_number || t("No phone number")}</Text>
+            <Text className="text-gray-400 mb-6 text-center px-4" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>{form.address || t("No address added")}</Text>
           </>
         )}
 
@@ -194,34 +194,34 @@ export default function ProfileScreen({ navigation }) {
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-gray-400 text-xs font-bold uppercase" style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{t('My Crop Listings')}</Text>
               <TouchableOpacity onPress={fetchCrops}>
-                <Ionicons name="refresh-outline" size={16} color="#4b5563" />
+                <Ionicons name="refresh" size={16} color="#9ca3af" />
               </TouchableOpacity>
             </View>
             
             {loadingCrops ? (
               <ActivityIndicator color="#029a43" />
             ) : myCrops.length === 0 ? (
-              <Text className="text-gray-500 italic text-center py-2" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>No crops listed yet.</Text>
+              <Text className="text-gray-500 italic text-center py-2" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>{t('No crops listed yet.')}</Text>
             ) : (
               myCrops.map((crop) => {
                 const isPaid = parseFloat(crop.quantity_available) === 0;
                 
                 // Find completed/locked order for buyer info
                 const successfulOrder = crop.orders?.find(o => o.status !== 'payment_failed' && o.status !== 'pending');
-                const buyerName = successfulOrder?.users?.full_name || 'A Buyer';
+                const buyerName = successfulOrder?.users?.full_name || t('A Buyer');
 
                 return (
                   <View key={crop.id} className="flex-row items-center justify-between mb-4 border-b border-gray-50 pb-4">
                     <View className="flex-1">
                       <Text className="text-gray-800 font-bold text-base" style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{crop.name}</Text>
-                      <Text className="text-gray-500 text-xs mt-1" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>₹{crop.price_per_kg} / kg</Text>
+                      <Text className="text-gray-500 text-xs mt-1" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>₹{crop.price_per_kg} {t('/ kg')}</Text>
                       {isPaid && successfulOrder && (
-                        <Text className="text-amber-600 text-xs mt-1" style={{ fontFamily: 'PlusJakartaSans_600SemiBold' }}>Bought by: {buyerName}</Text>
+                        <Text className="text-amber-600 text-xs mt-1" style={{ fontFamily: 'PlusJakartaSans_600SemiBold' }}>{t('Bought by:')} {buyerName}</Text>
                       )}
                     </View>
                     <View className={`px-3 py-1 rounded-full ${isPaid ? 'bg-amber-100' : 'bg-[#029a43]/10'}`}>
                       <Text className={`font-bold text-xs ${isPaid ? 'text-amber-700' : 'text-[#029a43]'}`} style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>
-                        {isPaid ? 'Sold Out / Paid' : `Active: ${crop.quantity_available}kg`}
+                        {isPaid ? t('Sold Out / Paid') : `${t('Active:')} ${crop.quantity_available}kg`}
                       </Text>
                     </View>
                   </View>

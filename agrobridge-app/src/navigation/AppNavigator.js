@@ -5,6 +5,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import * as Linking from 'expo-linking';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
+import Toast from 'react-native-toast-message';
+import { scheduleLocalNotification, registerForPushNotificationsAsync } from '../utils/notifications';
 import RegisterScreen from '../screens/auth/RegisterScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import DashboardScreen from '../screens/farmer/DashboardScreen';
@@ -31,6 +34,77 @@ export default function AppNavigator() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [loading, languageChecked]);
+
+  // Global Notification Listeners and Permissions
+  React.useEffect(() => {
+    if (!user) return;
+    
+    // Ask for permissions only when the user is authenticated and viewing the app
+    registerForPushNotificationsAsync().then(token => {
+      if (token) console.log('Push token acquired:', token);
+    });
+
+    const userId = user.id || user.uid;
+
+    const messagesChannel = supabase
+      .channel('global:messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+        if (payload.new && payload.new.sender_id !== userId) {
+          const isFarmer = userRole === 'FARMER' || userRole === 'GUEST_FARMER';
+          const title = '💬 New Message';
+          const body = isFarmer ? 'A buyer wants to negotiate the price.' : 'The farmer has replied to your negotiation.';
+          
+          Toast.show({
+            type: 'info',
+            text1: title,
+            text2: body,
+            position: 'top',
+            topOffset: 60,
+            visibilityTime: 4000,
+          });
+          scheduleLocalNotification(title, body);
+        }
+      })
+      .subscribe();
+
+    const ordersChannel = supabase
+      .channel('global:orders')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, payload => {
+        if (payload.new) {
+          if (payload.new.status === 'completed' && payload.old.status !== 'completed') {
+            const title = '💰 Payment Released';
+            const body = 'Your funds have been released from Escrow.';
+            Toast.show({
+              type: 'success',
+              text1: title,
+              text2: body,
+              position: 'top',
+              topOffset: 60,
+              visibilityTime: 5000,
+            });
+            scheduleLocalNotification(title, body);
+          } else if (payload.new.status === 'shipped' && payload.old.status !== 'shipped') {
+            const title = '🚚 Order Dispatched';
+            const body = 'Your order is on the way!';
+            Toast.show({
+              type: 'success',
+              text1: title,
+              text2: body,
+              position: 'top',
+              topOffset: 60,
+              visibilityTime: 5000,
+            });
+            scheduleLocalNotification(title, body);
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(ordersChannel);
+    };
+  }, [user, userRole]);
 
   // Show a minimal loading state for deep link transitions and auth state changes to prevent black screens
   if (loading || !languageChecked) {

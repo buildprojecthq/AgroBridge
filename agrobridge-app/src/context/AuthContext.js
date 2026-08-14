@@ -37,12 +37,12 @@ export const AuthProvider = ({ children }) => {
     
     checkLanguage();
 
-    const fetchUserProfile = async (userId) => {
+    const fetchUserProfile = async (authUser) => {
       try {
         const { data, error } = await supabase
           .from('users')
           .select('role, full_name, phone_number, address')
-          .eq('id', userId)
+          .eq('id', authUser.id)
           .maybeSingle();
 
         let updatedRole = null;
@@ -55,15 +55,22 @@ export const AuthProvider = ({ children }) => {
           updatedProfile = data;
         } else {
           // If the authenticated user has no profile record in 'public.users',
-          // automatically create one with role 'FARMER' to prevent RLS blocks
-          const defaultRole = 'FARMER';
-          console.log(`No database profile found for user ${userId}. Auto-creating with role ${defaultRole}.`);
+          // automatically create one using user_metadata to prevent RLS blocks and race conditions
+          const meta = authUser.user_metadata || {};
+          const defaultRole = meta.role || 'FARMER';
+          const newProfile = { 
+            id: authUser.id, 
+            role: defaultRole,
+            full_name: meta.full_name || '',
+            phone_number: meta.phone_number || ''
+          };
+          console.log(`No database profile found for user ${authUser.id}. Auto-creating from metadata.`);
           const { error: upsertError } = await supabase
             .from('users')
-            .upsert({ id: userId, role: defaultRole });
+            .upsert(newProfile);
           if (upsertError) throw upsertError;
           updatedRole = defaultRole;
-          updatedProfile = { role: defaultRole };
+          updatedProfile = newProfile;
         }
 
         if (updatedRole) {
@@ -113,7 +120,7 @@ export const AuthProvider = ({ children }) => {
           );
           
           Promise.race([
-            fetchUserProfile(session.user.id),
+            fetchUserProfile(session.user),
             timeoutPromise
           ]).catch(err => {
             console.log("Background sync skipped or timed out:", err.message);

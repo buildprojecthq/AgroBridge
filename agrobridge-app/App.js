@@ -21,6 +21,8 @@ import { registerForPushNotificationsAsync } from './src/utils/notifications';
 
 import Toast from 'react-native-toast-message';
 
+import { toastConfig } from './src/components/CustomToast';
+
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
@@ -33,11 +35,8 @@ export default function App() {
     PlusJakartaSans_800ExtraBold,
   });
 
-  // Force Immersive Fullscreen Mode on Android and Setup Notifications
+  // Force Immersive Fullscreen Mode on Android
   useEffect(() => {
-    registerForPushNotificationsAsync().then(token => {
-      console.log('App initialization push token:', token);
-    });
 
     if (Platform.OS === 'android') {
       const configureNavBar = async () => {
@@ -69,7 +68,7 @@ export default function App() {
       <AuthProvider>
         <AppNavigator />
       </AuthProvider>
-      <Toast />
+      <Toast config={toastConfig} />
     </SafeAreaProvider>
   );
 }

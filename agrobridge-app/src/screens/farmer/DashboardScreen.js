@@ -532,11 +532,10 @@ export default function DashboardScreen({ navigation }) {
           {/* ── Conditional Action: Exhaust Fans ── */}
           {hasHardware && isSpoilageDetected && (
             <TouchableOpacity 
-              className="mx-4 bg-red-500 border-[1.5px] border-red-600 rounded-full py-4 items-center mb-6 shadow-sm shadow-red-500/30 flex-row justify-center"
+              className="bg-red-500/20 border border-red-500/50 py-3 rounded-xl mt-4 mx-4 mb-6 items-center"
               onPress={() => alert('Exhaust command sent to hardware!')}
             >
-              <Ionicons name="warning" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text className="text-white text-base font-bold">ACTIVATE EXHAUST FANS</Text>
+              <Text className="text-red-600 text-base font-bold">{t('ACTIVATE EXHAUST FANS')}</Text>
             </TouchableOpacity>
           )}
 
@@ -758,52 +757,56 @@ export default function DashboardScreen({ navigation }) {
           >
             <View className="w-12 h-1.5 bg-slate-200 rounded-full self-center mb-6" />
             
-            <Text className="text-2xl font-bold text-slate-800 mb-2 font-['PlusJakartaSans_800ExtraBold']">Update {selectedCrop?.commodity} Price</Text>
-            <Text className="text-slate-500 mb-6 font-medium">Review the daily market benchmark and adjust your asking price to stay competitive.</Text>
+            <Text className="text-2xl font-bold text-slate-800 mb-2 font-['PlusJakartaSans_800ExtraBold']">{t('Update')} {selectedCrop?.commodity} {t('Price')}</Text>
+            <Text className="text-slate-500 mb-6 font-medium">{t('Review the daily market benchmark and adjust your asking price to stay competitive.')}</Text>
 
-            <View className="flex-row justify-between mb-8">
-              {/* Left Box: Govt Mandi Card */}
-              <View className="w-[48%] bg-slate-100 rounded-2xl p-4 border border-slate-200">
-                <Text className="text-slate-500 font-semibold text-xs mb-2">Govt. Price Today</Text>
-                {isFetchingMandi ? (
-                  <ActivityIndicator size="small" color="#10b981" className="self-start mt-2" />
-                ) : mandiData ? (
-                  <Text className="text-slate-800 font-bold text-xl">₹{mandiData.modal_price} <Text className="text-sm">/ kg</Text></Text>
-                ) : (
-                  <Text className="text-slate-400 font-medium text-sm">Data unavailable</Text>
-                )}
-              </View>
-              
-              {/* Right Box: Action Card */}
-              <View 
-                className={`w-[48%] bg-white rounded-2xl p-4 border-2 ${
-                  !newAskingPrice ? 'border-slate-200' :
-                  mandiData && Number(newAskingPrice) <= mandiData.modal_price ? 'border-green-500' : 'border-amber-500'
-                }`}
-              >
-                <Text className="text-slate-500 font-semibold text-xs mb-2">Your New Price</Text>
-                <View className="flex-row items-center">
-                  <Text className="text-slate-800 font-bold text-xl mr-1">₹</Text>
-                  <TextInput 
-                    className="text-slate-800 font-bold text-xl flex-1"
-                    placeholder="0.00"
-                    keyboardType="numeric"
-                    value={newAskingPrice}
-                    onChangeText={setNewAskingPrice}
-                    autoFocus
-                  />
+            <View className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+              <View className="flex-row justify-between items-center mb-4">
+                <View>
+                  <Text className="text-slate-500 font-semibold text-xs mb-2">{t('Govt. Price Today')}</Text>
+                  {isFetchingMandi ? (
+                    <ActivityIndicator size="small" color="#22c55e" />
+                  ) : mandiData ? (
+                    <Text className="text-slate-800 font-bold text-xl">₹{mandiData.modal_price} <Text className="text-sm">{t('/ kg')}</Text></Text>
+                  ) : (
+                    <Text className="text-slate-400 font-medium text-sm">{t('Data unavailable')}</Text>
+                  )}
+                </View>
+                
+                <View className="h-full w-px bg-slate-200 mx-4" />
+                
+                <View className="flex-1">
+                  <Text className="text-slate-500 font-semibold text-xs mb-2">{t('Your New Price')}</Text>
+                  <View className="flex-row items-center">
+                    <Text className="text-slate-800 font-bold text-xl mr-1">₹</Text>
+                    <TextInput 
+                      className="text-slate-800 font-bold text-xl flex-1"
+                      keyboardType="numeric"
+                      value={newAskingPrice}
+                      onChangeText={setNewAskingPrice}
+                      autoFocus
+                    />
+                  </View>
                 </View>
               </View>
             </View>
 
-            <TouchableOpacity 
-              className="bg-green-600 py-4 rounded-xl items-center flex-row justify-center"
-              onPress={handleSaveUpdatedPrice}
-              disabled={isUpdatingPrice || !newAskingPrice}
-              style={{ opacity: (!newAskingPrice || isUpdatingPrice) ? 0.5 : 1 }}
-            >
-              {isUpdatingPrice ? <ActivityIndicator color="#ffffff" /> : <Text className="text-white font-bold text-lg font-['PlusJakartaSans_700Bold']">Save Price</Text>}
-            </TouchableOpacity>
+            <View className="flex-row space-x-3">
+              <TouchableOpacity 
+                className="flex-1 py-4 bg-slate-200 rounded-xl items-center"
+                onPress={() => setUpdateModalVisible(false)}
+              >
+                <Text className="text-slate-700 font-bold text-lg font-['PlusJakartaSans_700Bold']">{t('Cancel')}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                className="flex-1 py-4 bg-[#029a43] rounded-xl items-center flex-row justify-center"
+                onPress={handleSaveUpdatedPrice}
+                disabled={isUpdatingPrice || !newAskingPrice}
+              >
+                {isUpdatingPrice ? <ActivityIndicator color="#ffffff" /> : <Text className="text-white font-bold text-lg font-['PlusJakartaSans_700Bold']">{t('Save Price')}</Text>}
+              </TouchableOpacity>
+            </View>
 
           </MotiView>
         </KeyboardAvoidingView>

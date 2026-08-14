@@ -8,8 +8,8 @@
 // ==========================================
 // 1. CONFIGURATION
 // ==========================================
-const char* WIFI_SSID = "YASHAS_R";
-const char* WIFI_PASSWORD = "0987654321";
+const char* WIFI_SSID = "Ramamurthy's F15";
+const char* WIFI_PASSWORD = "rama@12321";
 
 // Your Supabase Edge Function URL for ingest-telemetry
 const char* CLOUD_FUNCTION_URL = "https://zavjkhdvrvfphxqgnhqq.supabase.co/functions/v1/ingest-telemetry";

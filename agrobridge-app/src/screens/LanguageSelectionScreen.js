@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 
 const LANGUAGES = [
   { id: 'en', name: 'English', native: 'English' },
@@ -18,6 +19,7 @@ const LANGUAGES = [
 ];
 
 export default function LanguageSelectionScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const { language, setLanguage } = useAuth();
   const [selected, setSelected] = useState(language || 'en');
 
@@ -76,7 +78,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                   textShadowRadius: 8,
                 }}
               >
-                Select Language
+                {t('Select Language')}
               </Text>
               <Text
                 style={{
@@ -89,7 +91,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                   textShadowRadius: 4,
                 }}
               >
-                Choose your preferred language for AgroBridge.
+                {t('Choose your preferred language for AgroBridge.')}
               </Text>
             </View>
 
@@ -232,7 +234,7 @@ export default function LanguageSelectionScreen({ navigation, route }) {
                   fontFamily: 'PlusJakartaSans_700Bold',
                 }}
               >
-                Continue
+                {t('Continue')}
               </Text>
             </TouchableOpacity>
           </View>

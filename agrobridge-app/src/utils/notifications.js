@@ -1,6 +1,6 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -26,8 +26,26 @@ export async function registerForPushNotificationsAsync() {
   let finalStatus = existingStatus;
   
   if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+    finalStatus = await new Promise((resolve) => {
+      Alert.alert(
+        "Enable Notifications",
+        "We need your permission to send you real-time updates on your orders and messages.",
+        [
+          { 
+            text: "Not Now", 
+            style: "cancel",
+            onPress: () => resolve('denied')
+          },
+          { 
+            text: "Allow", 
+            onPress: async () => {
+              const { status } = await Notifications.requestPermissionsAsync();
+              resolve(status);
+            } 
+          }
+        ]
+      );
+    });
   }
   
   if (finalStatus !== 'granted') {

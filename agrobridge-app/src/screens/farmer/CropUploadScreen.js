@@ -8,9 +8,11 @@ import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 export default function CropUploadScreen({ navigation }) {
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const [cropType, setCropType] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -113,11 +115,11 @@ export default function CropUploadScreen({ navigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>List New Crop</Text>
-      <Text style={styles.subtitle}>Add your produce to the B2B Marketplace</Text>
+      <Text style={styles.title}>{t('List New Crop')}</Text>
+      <Text style={styles.subtitle}>{t('Add your produce to the B2B Marketplace')}</Text>
 
       <View style={styles.formCard}>
-        <Text style={styles.label}>Crop Name (e.g., Red Onions)</Text>
+        <Text style={styles.label}>{t('Crop Name (e.g., Red Onions)')}</Text>
         <TextInput
           style={styles.input}
           placeholder="Enter crop type"
@@ -125,7 +127,7 @@ export default function CropUploadScreen({ navigation }) {
           onChangeText={setCropType}
         />
 
-        <Text style={styles.label}>Available Quantity (in Kg)</Text>
+        <Text style={styles.label}>{t('Available Quantity (in Kg)')}</Text>
         <TextInput
           style={styles.input}
           placeholder="e.g., 500"
@@ -134,7 +136,7 @@ export default function CropUploadScreen({ navigation }) {
           keyboardType="numeric"
         />
 
-        <Text style={styles.label}>Price per Kg (₹)</Text>
+        <Text style={styles.label}>{t('Price per Kg (₹)')}</Text>
         <TextInput
           style={styles.input}
           placeholder="e.g., 25.50"
@@ -149,13 +151,13 @@ export default function CropUploadScreen({ navigation }) {
           ) : (
             <>
               <Ionicons name="camera-outline" size={32} color="#555" />
-              <Text style={styles.imageButtonText}>Tap to Add Photo</Text>
+              <Text style={styles.imageButtonText}>{t('Tap to Add Photo')}</Text>
             </>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.submitButton} onPress={handleListCrop} disabled={uploading}>
-          {uploading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Publish to Marketplace</Text>}
+          {uploading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>{t('Publish to Marketplace')}</Text>}
         </TouchableOpacity>
       </View>
     </ScrollView>
