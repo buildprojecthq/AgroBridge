@@ -14,12 +14,14 @@ import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { scheduleLocalNotification } from '../../utils/notifications';
 
 const { height } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
+  const [generatedOtp, setGeneratedOtp] = useState('');
   const [confirm, setConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -42,11 +44,21 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
+      // Generate Dummy OTP and trigger local notification
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedOtp(code);
+      
+      await scheduleLocalNotification(
+        "Your OTP Code",
+        `Use code ${code} to login to AgroBridge.`
+      );
+
       // Simulate network delay for presentation
       await new Promise(resolve => setTimeout(resolve, 1500));
       setConfirm(true);
     } catch (error) {
       console.log("Error:", error.message);
+      setErrorMsg("Failed to send OTP. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -58,9 +70,14 @@ export default function LoginScreen({ navigation }) {
       setErrorMsg('Please enter a valid 6-digit OTP.');
       return;
     }
+    if (otp !== generatedOtp) {
+      setErrorMsg('Invalid OTP. Please try again.');
+      return;
+    }
+    
     setLoading(true);
     try {
-      if (otp && otp.length === 6) {
+      if (otp === generatedOtp) {
         const fakeEmail = `${phone.trim()}@agrobridge.app`;
         const fakePassword = `AgroMock123!`;
 
@@ -70,7 +87,13 @@ export default function LoginScreen({ navigation }) {
         });
 
         if (error) {
-          throw new Error("User not found or invalid OTP. Please register first.");
+          if (error.message.includes('Invalid login credentials')) {
+            throw new Error("User not found. Please register first.");
+          } else if (error.message.includes('Email not confirmed')) {
+            throw new Error("Please ask the admin to turn off Email Confirmation in Supabase Auth settings!");
+          } else {
+            throw error;
+          }
         }
       } else {
         throw new Error('Please enter a valid 6-digit OTP.');

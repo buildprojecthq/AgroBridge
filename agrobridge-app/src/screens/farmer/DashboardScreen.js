@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
+import { Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform, Image, Alert, Switch } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
@@ -17,6 +17,8 @@ export default function DashboardScreen({ navigation }) {
   const [temperature, setTemperature] = useState(30.0);
   const [humidity, setHumidity] = useState(68);
   const [spoilageRisk, setSpoilageRisk] = useState(2);
+  const [fanStatus, setFanStatus] = useState(false);
+  const [isTogglingFan, setIsTogglingFan] = useState(false);
   const [hasHardware, setHasHardware] = useState(false);
   const [hardwareDeviceId, setHardwareDeviceId] = useState(null);
   const [linkDeviceIdInput, setLinkDeviceIdInput] = useState('');
@@ -47,77 +49,91 @@ export default function DashboardScreen({ navigation }) {
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [pendingEscrow, setPendingEscrow] = useState(0);
 
+  const fetchData = async () => {
+    const userId = user?.id || user?.uid;
+    if (!userId) return;
+    try {
+      // Fetch Active Crops
+      const { data: cropsData, error: cropsError } = await supabase
+        .from('crops')
+        .select(`
+          *,
+          orders (
+            status,
+            buyer_id,
+            users (
+              full_name
+            )
+          )
+        `)
+        .eq('farmer_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (cropsError) throw cropsError;
+      if (cropsData) {
+        setActiveCrops(cropsData.map(c => {
+          let parsedState = 'Karnataka';
+          let parsedMarket = 'Unknown';
+          if (c.description && c.description.includes('Market:')) {
+            const parts = c.description.split(', ');
+            parsedState = parts[0]?.replace('State: ', '') || 'Karnataka';
+            parsedMarket = parts[1]?.replace('Market: ', '') || 'Unknown';
+          }
+          return {
+            id: c.id,
+            commodity: c.name,
+            askingPrice: c.price_per_kg,
+            weight: `${c.quantity_available} kg`,
+            state: parsedState,
+            market: parsedMarket,
+            orders: c.orders,
+            quantity_available: c.quantity_available,
+            price_per_kg: c.price_per_kg
+          };
+        }));
+      }
+
+      // Fetch Earnings from Orders
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('total_price, status, crops!inner(farmer_id)')
+        .eq('crops.farmer_id', userId);
+
+      if (ordersError) throw ordersError;
+      
+      let earned = 0;
+      let pending = 0;
+      if (ordersData) {
+        ordersData.forEach(order => {
+          if (order.status === 'completed') earned += order.total_price;
+          if (order.status === 'escrow_locked') pending += order.total_price;
+        });
+      }
+      setTotalEarnings(earned);
+      setPendingEscrow(pending);
+
+      // Fetch Unique Commodities for Dropdown
+      const { data: mandiPrices, error: mandiPricesError } = await supabase
+        .from('mandi_prices')
+        .select('commodity');
+
+      if (!mandiPricesError && mandiPrices) {
+        const unique = Array.from(new Set(mandiPrices.map(p => p.commodity))).sort();
+        if (unique.length > 0) {
+          setAvailableCommodities(unique);
+        }
+      }
+
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoadingCrops(false);
+    }
+  };
+
   useEffect(() => {
     const userId = user?.id || user?.uid;
     if (!userId) return;
-
-    const fetchData = async () => {
-      try {
-        // Fetch Active Crops
-        const { data: cropsData, error: cropsError } = await supabase
-          .from('crops')
-          .select('*')
-          .eq('farmer_id', userId)
-          .order('created_at', { ascending: false });
-
-        if (cropsError) throw cropsError;
-        if (cropsData) {
-          setActiveCrops(cropsData.map(c => {
-            let parsedState = 'Karnataka';
-            let parsedMarket = 'Unknown';
-            if (c.description && c.description.includes('Market:')) {
-              const parts = c.description.split(', ');
-              parsedState = parts[0]?.replace('State: ', '') || 'Karnataka';
-              parsedMarket = parts[1]?.replace('Market: ', '') || 'Unknown';
-            }
-            return {
-              id: c.id,
-              commodity: c.name,
-              askingPrice: c.price_per_kg,
-              weight: `${c.quantity_available} kg`,
-              state: parsedState,
-              market: parsedMarket
-            };
-          }));
-        }
-
-        // Fetch Earnings from Orders
-        const { data: ordersData, error: ordersError } = await supabase
-          .from('orders')
-          .select('total_price, status, crops!inner(farmer_id)')
-          .eq('crops.farmer_id', userId);
-
-        if (ordersError) throw ordersError;
-        
-        let earned = 0;
-        let pending = 0;
-        if (ordersData) {
-          ordersData.forEach(order => {
-            if (order.status === 'completed') earned += order.total_price;
-            if (order.status === 'escrow_locked') pending += order.total_price;
-          });
-        }
-        setTotalEarnings(earned);
-        setPendingEscrow(pending);
- 
-        // Fetch Unique Commodities for Dropdown
-        const { data: mandiPrices, error: mandiPricesError } = await supabase
-          .from('mandi_prices')
-          .select('commodity');
-
-        if (!mandiPricesError && mandiPrices) {
-          const unique = Array.from(new Set(mandiPrices.map(p => p.commodity))).sort();
-          if (unique.length > 0) {
-            setAvailableCommodities(unique);
-          }
-        }
-
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoadingCrops(false);
-      }
-    };
 
     fetchData();
 
@@ -131,7 +147,6 @@ export default function DashboardScreen({ navigation }) {
     const ordersChannel = supabase
       .channel('public:orders_farmer')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        // Simple re-fetch on any order change, in production use specific filters
         fetchData();
       })
       .subscribe();
@@ -166,6 +181,7 @@ export default function DashboardScreen({ navigation }) {
       
       if (error) throw error;
       setUpdateModalVisible(false);
+      await fetchData();
     } catch (e) {
       console.error("Error updating price: ", e);
     } finally {
@@ -233,6 +249,9 @@ export default function DashboardScreen({ navigation }) {
       setCropForm({ commodity: '', state: 'Karnataka', market: '', weight: '', askingPrice: '', image: null });
       setMandiData(null);
       setCropSearchQuery('');
+      
+      // Instantly refresh active crop listings on the dashboard
+      await fetchData();
     } catch (e) {
       console.error("Error saving listing: ", e);
       Alert.alert("Error Saving Listing", e.message || String(e));
@@ -270,8 +289,9 @@ export default function DashboardScreen({ navigation }) {
           if (data) {
             setTemperature(data.current_temperature);
             setHumidity(data.current_humidity);
-            const riskPercentage = Math.min(Math.round((data.gas_level / 500) * 100), 100);
+            const riskPercentage = Math.min(Math.round((data.gas_level / 1500) * 100), 100);
             setSpoilageRisk(riskPercentage);
+            setFanStatus(!!data.fan_status);
           }
 
           // Subscribe to real-time telemetry updates for this device
@@ -279,10 +299,19 @@ export default function DashboardScreen({ navigation }) {
             .channel(`telemetry_${hardware.device_id}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'storage_telemetry', filter: `device_id=eq.${hardware.device_id}` }, payload => {
               console.log("🔥 REALTIME PAYLOAD RECEIVED:", payload);
-              if (payload.new && payload.new.current_temperature !== undefined) {
-                setTemperature(payload.new.current_temperature);
-                setHumidity(payload.new.current_humidity);
-                setSpoilageRisk(Math.min(Math.round((payload.new.gas_level / 500) * 100), 100));
+              if (payload.new) {
+                if (payload.new.current_temperature !== undefined) {
+                  setTemperature(payload.new.current_temperature);
+                }
+                if (payload.new.current_humidity !== undefined) {
+                  setHumidity(payload.new.current_humidity);
+                }
+                if (payload.new.gas_level !== undefined) {
+                  setSpoilageRisk(Math.min(Math.round((payload.new.gas_level / 1500) * 100), 100));
+                }
+                if (payload.new.fan_status !== undefined) {
+                  setFanStatus(!!payload.new.fan_status);
+                }
               }
             })
             .subscribe();
@@ -303,14 +332,35 @@ export default function DashboardScreen({ navigation }) {
     };
   }, [user, hardwareRefreshTrigger]);
 
+  const handleToggleFan = async (newValue) => {
+    if (!hardwareDeviceId) return;
+    const previousValue = fanStatus;
+    setFanStatus(newValue);
+    setIsTogglingFan(true);
+    try {
+      const { error } = await supabase
+        .from('storage_telemetry')
+        .update({ fan_status: newValue })
+        .eq('device_id', hardwareDeviceId);
+      if (error) throw error;
+    } catch (err) {
+      console.error("Failed to toggle fan:", err);
+      Alert.alert(t('Error'), t('Failed to update fan status'));
+      setFanStatus(previousValue);
+    } finally {
+      setIsTogglingFan(false);
+    }
+  };
+
   const handleLinkDevice = async () => {
-    if (!linkDeviceIdInput.trim()) return;
+    const cleanId = linkDeviceIdInput.trim().toUpperCase();
+    if (!cleanId) return;
     setIsLinking(true);
     try {
       const userId = user?.id || user?.uid;
       const { error } = await supabase.from('hardware_installations').upsert({
         farmer_id: userId,
-        device_id: linkDeviceIdInput.trim()
+        device_id: cleanId
       }, { onConflict: 'farmer_id' });
       if (error) throw error;
       
@@ -325,7 +375,7 @@ export default function DashboardScreen({ navigation }) {
     }
   };
 
-  const isSpoilageDetected = spoilageRisk >= 60; // Flag as dangerous if risk >= 60%
+  const isSpoilageDetected = spoilageRisk >= 85; // Flag as dangerous if gas >= 1300 (85%+)
 
   return (
     <>
@@ -427,6 +477,47 @@ export default function DashboardScreen({ navigation }) {
                     <Text className="text-red-500 text-xs font-bold mt-2 text-right">⚠️ CRITICAL LEVELS</Text>
                   )}
                 </View>
+
+                {/* Card 4 (Cooling Fan Controller) */}
+                <View 
+                  className="w-full bg-white rounded-3xl p-5 mb-6 border border-slate-100/50 flex-col"
+                  style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
+                >
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center flex-1 pr-3">
+                      <View className={`p-2.5 rounded-full ${fanStatus ? 'bg-emerald-100' : 'bg-slate-100'}`}>
+                        <Ionicons 
+                          name={fanStatus ? "snow" : "snow-outline"} 
+                          size={22} 
+                          color={fanStatus ? "#059669" : "#64748b"} 
+                        />
+                      </View>
+                      <View className="ml-3 flex-1">
+                        <Text className="text-slate-800 font-bold text-base font-['PlusJakartaSans_700Bold']">{t('Storage Cooling Fan')}</Text>
+                        <View className="flex-row items-center mt-0.5">
+                          <View className={`w-2 h-2 rounded-full mr-1.5 ${fanStatus ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                          <Text className={`text-xs font-semibold ${fanStatus ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {fanStatus ? t('Fan Running') : t('Fan Stopped')}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View className="items-center justify-center">
+                      {isTogglingFan ? (
+                        <ActivityIndicator size="small" color="#10b981" />
+                      ) : (
+                        <Switch
+                          trackColor={{ false: '#e2e8f0', true: '#a7f3d0' }}
+                          thumbColor={fanStatus ? '#10b981' : '#f8fafc'}
+                          ios_backgroundColor="#e2e8f0"
+                          onValueChange={handleToggleFan}
+                          value={fanStatus}
+                        />
+                      )}
+                    </View>
+                  </View>
+                </View>
               </View>
             ) : (
               <View className="bg-slate-100 rounded-3xl p-6 mb-6 border border-slate-200 border-dashed">
@@ -489,10 +580,10 @@ export default function DashboardScreen({ navigation }) {
             </View>
           </View>
 
-          {/* ── Section 1: Active Crops ── */}
+          {/* ── Section 1: My Crop Listings ── */}
           <View className="px-4 mt-2">
             <View className="flex-row justify-between items-center mb-3 mt-6">
-              <Text className="text-xl font-bold text-slate-800">{t('Active Crops')}</Text>
+              <Text className="text-xl font-bold text-slate-800">{t('My Crop Listings')}</Text>
               <TouchableOpacity 
                 className="bg-green-600 py-2 px-4 rounded-full flex-row items-center"
                 style={{ shadowColor: '#16a34a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
@@ -505,26 +596,45 @@ export default function DashboardScreen({ navigation }) {
             {loadingCrops ? (
               <ActivityIndicator size="large" color="#10b981" className="mt-8" />
             ) : activeCrops.length > 0 ? (
-              activeCrops.map((crop) => (
-                <View key={crop.id} className="bg-white rounded-3xl p-5 mb-4 border border-slate-100 shadow-sm">
-                  <View className="flex-row justify-between items-center mb-3">
-                    <Text className="text-lg font-bold text-slate-800 font-['PlusJakartaSans_800ExtraBold']">{crop.commodity}</Text>
-                    <Text className="text-emerald-600 font-bold bg-emerald-50 px-3 py-1 rounded-full text-xs">{crop.weight}</Text>
+              activeCrops.map((crop) => {
+                const isPaid = parseFloat(crop.quantity_available) === 0;
+                
+                // Find completed/locked order for buyer info
+                const successfulOrder = crop.orders?.find(o => o.status !== 'payment_failed' && o.status !== 'pending');
+                const buyerName = successfulOrder?.users?.full_name || t('A Buyer');
+
+                return (
+                  <View key={crop.id} className="bg-white rounded-3xl p-5 mb-4 border border-slate-100 shadow-sm">
+                    <View className="flex-row justify-between items-start mb-3">
+                      <View className="flex-1 pr-2">
+                        <Text className="text-lg font-bold text-slate-800 font-['PlusJakartaSans_800ExtraBold']">{crop.commodity}</Text>
+                        <Text className="text-slate-500 font-medium mb-1 text-sm mt-1">Asking Price: <Text className="text-slate-800 font-bold">₹{crop.askingPrice} / kg</Text></Text>
+                        {isPaid && successfulOrder && (
+                          <Text className="text-amber-600 text-xs mt-1 font-['PlusJakartaSans_600SemiBold']">{t('Bought by:')} {buyerName}</Text>
+                        )}
+                      </View>
+                      <View className={`px-3 py-1 rounded-full ${isPaid ? 'bg-amber-100' : 'bg-emerald-50'}`}>
+                        <Text className={`font-bold text-xs ${isPaid ? 'text-amber-700' : 'text-emerald-600'}`} style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>
+                          {isPaid ? t('Sold Out / Paid') : `${t('Active:')} ${crop.quantity_available}kg`}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {!isPaid && (
+                      <TouchableOpacity 
+                        className="bg-slate-100 py-3 rounded-xl flex-row justify-center items-center mt-2"
+                        onPress={() => handleOpenUpdateModal(crop)}
+                      >
+                        <Ionicons name="trending-up" size={18} color="#0f172a" style={{ marginRight: 6 }} />
+                        <Text className="text-slate-800 font-bold text-sm">Update Today's Price</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  <Text className="text-slate-500 font-medium mb-4 text-sm">Asking Price: <Text className="text-slate-800 font-bold">₹{crop.askingPrice} / kg</Text></Text>
-                  
-                  <TouchableOpacity 
-                    className="bg-slate-100 py-3 rounded-xl flex-row justify-center items-center"
-                    onPress={() => handleOpenUpdateModal(crop)}
-                  >
-                    <Ionicons name="trending-up" size={18} color="#0f172a" style={{ marginRight: 6 }} />
-                    <Text className="text-slate-800 font-bold text-sm">Update Today's Price</Text>
-                  </TouchableOpacity>
-                </View>
-              ))
+                );
+              })
             ) : (
               <View className="items-center justify-center py-6 border-2 border-dashed border-slate-200 rounded-3xl mt-2">
-                <Text className="text-slate-400 font-medium font-['PlusJakartaSans_500Medium']">{t('No active crops found.')}</Text>
+                <Text className="text-slate-400 font-medium font-['PlusJakartaSans_500Medium']">{t('No crops listed yet.')}</Text>
               </View>
             )}
           </View>

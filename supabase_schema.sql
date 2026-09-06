@@ -31,27 +31,37 @@ CREATE TABLE IF NOT EXISTS public.storage_telemetry (
   current_humidity REAL NOT NULL,
   gas_level INTEGER NOT NULL,
   status TEXT NOT NULL,
-  last_updated BIGINT NOT NULL -- Storing as unix timestamp matching the ESP32
+  last_updated BIGINT NOT NULL, -- Storing as unix timestamp matching the ESP32
+  fan_status BOOLEAN DEFAULT false
 );
 
 -- Enable RLS for telemetry (Assuming app users read this data)
 ALTER TABLE public.storage_telemetry ENABLE ROW LEVEL SECURITY;
 
--- Allow authenticated users to read telemetry (adjust if it should be public)
-CREATE POLICY "Authenticated users can read telemetry" 
+-- Allow all users (including Guest / Anonymous sessions) to read telemetry
+CREATE POLICY "Anyone can view telemetry" 
 ON public.storage_telemetry 
 FOR SELECT 
-TO authenticated 
 USING (true);
+
+-- Allow all users (including Guest / Anonymous sessions) to update fan_status
+CREATE POLICY "Anyone can update fan_status" 
+ON public.storage_telemetry 
+FOR UPDATE 
+USING (true)
+WITH CHECK (true);
 
 -- Note: The Edge Function will bypass RLS by using the Service Role key to insert data.
 
--- Hardware Installations mapping
+-- Hardware Installations mapping (Shared Gateways supported)
 CREATE TABLE IF NOT EXISTS public.hardware_installations (
   farmer_id UUID REFERENCES public.users(id) NOT NULL PRIMARY KEY,
-  device_id TEXT NOT NULL UNIQUE,
+  device_id TEXT NOT NULL,
   installed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- In existing databases, remove legacy UNIQUE constraint on device_id if present:
+-- ALTER TABLE public.hardware_installations DROP CONSTRAINT IF EXISTS hardware_installations_device_id_key;
 
 ALTER TABLE public.hardware_installations ENABLE ROW LEVEL SECURITY;
 
@@ -201,3 +211,24 @@ BEGIN
   WHERE id = crop_id_param;
 END;
 $$;
+
+-----------------------------------------------------------
+-- MANDI PRICES TABLE (Government Benchmark Rates)
+-----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.mandi_prices (
+  id TEXT PRIMARY KEY,
+  state TEXT,
+  market TEXT,
+  commodity TEXT NOT NULL,
+  modal_price NUMERIC NOT NULL,
+  min_price NUMERIC NOT NULL,
+  max_price NUMERIC NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.mandi_prices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view mandi prices" 
+ON public.mandi_prices FOR SELECT 
+USING (true);
+

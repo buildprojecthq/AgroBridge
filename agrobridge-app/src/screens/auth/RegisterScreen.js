@@ -14,12 +14,14 @@ import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
+import { scheduleLocalNotification } from '../../utils/notifications';
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
+  const [generatedOtp, setGeneratedOtp] = useState('');
   const [confirm, setConfirm] = useState(false);
   const [role, setRole] = useState('FARMER');
   const [registering, setRegistering] = useState(false);
@@ -44,8 +46,7 @@ export default function RegisterScreen({ navigation }) {
       newErrors.name = 'Full Name must be between 5 and 20 characters.';
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) newErrors.email = 'Email Address is required.';
-    else if (!emailRegex.test(email.trim())) newErrors.email = 'Please enter a valid email address.';
+    if (email.trim() !== '' && !emailRegex.test(email.trim())) newErrors.email = 'Please enter a valid email address.';
 
     if (!phone) newErrors.phone = 'Phone Number is required.';
     else if (phone.trim().length !== 10) newErrors.phone = 'Please enter exactly 10 digits.';
@@ -54,11 +55,21 @@ export default function RegisterScreen({ navigation }) {
 
     setRegistering(true);
     try {
+      // Generate Dummy OTP and trigger local notification
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedOtp(code);
+      
+      await scheduleLocalNotification(
+        "Your OTP Code",
+        `Use code ${code} to register with AgroBridge.`
+      );
+
       // Simulate network delay for presentation
       await new Promise(resolve => setTimeout(resolve, 1500));
       setConfirm(true);
     } catch (error) {
       console.log("Error:", error.message);
+      setErrors({ general: "Failed to send OTP. Please try again." });
     } finally {
       setRegistering(false);
     }
@@ -71,6 +82,10 @@ export default function RegisterScreen({ navigation }) {
       setErrors({ otp: "Please enter a valid 6-digit OTP." });
       return;
     }
+    if (otp !== generatedOtp) {
+      setErrors({ otp: "Invalid OTP. Please try again." });
+      return;
+    }
 
     setRegistering(true);
     try {
@@ -78,10 +93,17 @@ export default function RegisterScreen({ navigation }) {
       const fakeEmail = `${phone.trim()}@agrobridge.app`;
       const fakePassword = `AgroMock123!`;
 
-      // 2. Sign up the user
+      // 2. Sign up the user with metadata to prevent race conditions with AuthContext
       const { data, error } = await supabase.auth.signUp({
         email: fakeEmail,
         password: fakePassword,
+        options: {
+          data: {
+            full_name: name.trim(),
+            phone_number: `+91${phone.trim()}`,
+            role: role
+          }
+        }
       });
 
       if (error) {
@@ -253,11 +275,11 @@ export default function RegisterScreen({ navigation }) {
 
                       <View>
                         <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 12, marginLeft: 16, fontFamily: 'PlusJakartaSans_700Bold' }}>
-                          {t('Email Address')}
+                          {t('Email Address')} <Text style={{ color: '#9ca3af', fontWeight: 'normal' }}>({t('optional')})</Text>
                         </Text>
                         <TextInput
                           style={[inputContainerStyle, inputTextStyle]}
-                          placeholder={t('Enter your email')}
+                          placeholder={t('Enter your email (optional)')}
                           placeholderTextColor="#6b7280"
                           value={email}
                           onChangeText={(val) => { setEmail(val); setErrors(p => ({ ...p, email: '' })); }}

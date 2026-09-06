@@ -18,12 +18,17 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 2. The target commodities and states we want to track (Karnataka only)
+    // 2. The target commodities and states we want to track (Karnataka)
     const targets = [
-      { state: 'Karnataka', market: 'Kengeri', commodity: 'Corn', basePrice: 200 },
-      { state: 'Karnataka', market: 'Mysuru', commodity: 'Tomato', basePrice: 40 },
-      { state: 'Karnataka', market: 'Bengaluru', commodity: 'Wheat', basePrice: 35 },
-      { state: 'Karnataka', market: 'Chamarajanagar', commodity: 'Rice', basePrice: 50 },
+      { state: 'Karnataka', market: 'Kengeri', commodity: 'Corn', basePrice: 24 },
+      { state: 'Karnataka', market: 'Mysuru', commodity: 'Tomato', basePrice: 35 },
+      { state: 'Karnataka', market: 'Bengaluru', commodity: 'Wheat', basePrice: 28 },
+      { state: 'Karnataka', market: 'Chamarajanagar', commodity: 'Rice', basePrice: 45 },
+      { state: 'Karnataka', market: 'Hubballi', commodity: 'Onion', basePrice: 30 },
+      { state: 'Karnataka', market: 'Belagavi', commodity: 'Potato', basePrice: 25 },
+      { state: 'Karnataka', market: 'Shivamogga', commodity: 'Green Chilli', basePrice: 60 },
+      { state: 'Karnataka', market: 'Hassan', commodity: 'Ginger', basePrice: 90 },
+      { state: 'Karnataka', market: 'Kolar', commodity: 'Garlic', basePrice: 120 }
     ];
 
     const apiKey = Deno.env.get('DATA_GOV_API_KEY');

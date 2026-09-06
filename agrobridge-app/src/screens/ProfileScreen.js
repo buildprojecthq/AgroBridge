@@ -17,9 +17,6 @@ export default function ProfileScreen({ navigation }) {
     address: ''
   });
 
-  const [myCrops, setMyCrops] = useState([]);
-  const [loadingCrops, setLoadingCrops] = useState(false);
-
   useEffect(() => {
     setForm({
       full_name: userProfile?.full_name || user?.displayName || '',
@@ -27,39 +24,6 @@ export default function ProfileScreen({ navigation }) {
       address: userProfile?.address || ''
     });
   }, [userProfile, user]);
-
-  const fetchCrops = async () => {
-    setLoadingCrops(true);
-    try {
-      const { data, error } = await supabase
-        .from('crops')
-        .select(`
-          id, name, price_per_kg, quantity_available, created_at,
-          orders (
-            status,
-            buyer_id,
-            users (
-              full_name
-            )
-          )
-        `)
-        .eq('farmer_id', user.id || user.uid)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setMyCrops(data || []);
-    } catch (e) {
-      console.error('Error fetching crops:', e);
-    } finally {
-      setLoadingCrops(false);
-    }
-  };
-
-  useEffect(() => {
-    if (userRole === 'FARMER' || userRole === 'GUEST_FARMER') {
-      fetchCrops();
-    }
-  }, [userRole, user]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -89,7 +53,11 @@ export default function ProfileScreen({ navigation }) {
   };
 
   return (
-    <ScrollView className="flex-1 bg-slate-50">
+    <ScrollView 
+      className="flex-1 bg-slate-50"
+      contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header */}
       <View className="flex-row items-center px-6 pt-16 pb-6 bg-white rounded-b-3xl shadow-sm shadow-black/5">
         <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4">
@@ -186,49 +154,6 @@ export default function ProfileScreen({ navigation }) {
             <Ionicons name="pencil" size={18} color="#fff" style={{ marginRight: 8 }} />
             <Text className="text-white font-bold" style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{t('Edit Profile')}</Text>
           </TouchableOpacity>
-        )}
-
-        {/* New Crop History Section for Farmers */}
-        {!isEditing && (userRole === 'FARMER' || userRole === 'GUEST_FARMER') && (
-          <View className="w-full bg-white rounded-3xl p-6 shadow-sm shadow-black/5 border border-gray-100 mb-6 mt-2">
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-gray-400 text-xs font-bold uppercase" style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{t('My Crop Listings')}</Text>
-              <TouchableOpacity onPress={fetchCrops}>
-                <Ionicons name="refresh" size={16} color="#9ca3af" />
-              </TouchableOpacity>
-            </View>
-            
-            {loadingCrops ? (
-              <ActivityIndicator color="#029a43" />
-            ) : myCrops.length === 0 ? (
-              <Text className="text-gray-500 italic text-center py-2" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>{t('No crops listed yet.')}</Text>
-            ) : (
-              myCrops.map((crop) => {
-                const isPaid = parseFloat(crop.quantity_available) === 0;
-                
-                // Find completed/locked order for buyer info
-                const successfulOrder = crop.orders?.find(o => o.status !== 'payment_failed' && o.status !== 'pending');
-                const buyerName = successfulOrder?.users?.full_name || t('A Buyer');
-
-                return (
-                  <View key={crop.id} className="flex-row items-center justify-between mb-4 border-b border-gray-50 pb-4">
-                    <View className="flex-1">
-                      <Text className="text-gray-800 font-bold text-base" style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{crop.name}</Text>
-                      <Text className="text-gray-500 text-xs mt-1" style={{ fontFamily: 'PlusJakartaSans_500Medium' }}>₹{crop.price_per_kg} {t('/ kg')}</Text>
-                      {isPaid && successfulOrder && (
-                        <Text className="text-amber-600 text-xs mt-1" style={{ fontFamily: 'PlusJakartaSans_600SemiBold' }}>{t('Bought by:')} {buyerName}</Text>
-                      )}
-                    </View>
-                    <View className={`px-3 py-1 rounded-full ${isPaid ? 'bg-amber-100' : 'bg-[#029a43]/10'}`}>
-                      <Text className={`font-bold text-xs ${isPaid ? 'text-amber-700' : 'text-[#029a43]'}`} style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>
-                        {isPaid ? t('Sold Out / Paid') : `${t('Active:')} ${crop.quantity_available}kg`}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })
-            )}
-          </View>
         )}
 
         {!isEditing && (

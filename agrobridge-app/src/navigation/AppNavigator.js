@@ -28,22 +28,24 @@ const Stack = createStackNavigator();
 export default function AppNavigator() {
   const { user, userRole, loading, language, languageChecked } = useAuth();
 
+  // 1) Ask for Notification Permissions globally on app launch
+  React.useEffect(() => {
+    registerForPushNotificationsAsync().then(token => {
+      if (token) console.log('Push token acquired:', token);
+    });
+  }, []);
+
+  // 2) Hide splash screen when ready
   React.useEffect(() => {
     if (!loading && languageChecked) {
-      // Hide the native splash screen only once auth and language are fully resolved
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [loading, languageChecked]);
 
-  // Global Notification Listeners and Permissions
+  // 3) Global Notification Listeners for authenticated users
   React.useEffect(() => {
     if (!user) return;
     
-    // Ask for permissions only when the user is authenticated and viewing the app
-    registerForPushNotificationsAsync().then(token => {
-      if (token) console.log('Push token acquired:', token);
-    });
-
     const userId = user.id || user.uid;
 
     const messagesChannel = supabase

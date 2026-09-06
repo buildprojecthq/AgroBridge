@@ -59,13 +59,25 @@ serve(async (req: Request) => {
     // 4. Extract Data
     const { deviceId, temperature, humidity, gasLevel, timestamp } = body;
 
-    // 5. Smart Spoilage Logic
-    const SPOILAGE_THRESHOLD = 250;
+    // 5. Smart Spoilage & Auto-Ventilation Logic
+    const SPOILAGE_THRESHOLD = 1300;      // Critical gas threshold
+    const ELEVATED_GAS_THRESHOLD = 1200;  // Elevated warning threshold
+    const TEMP_HIGH_THRESHOLD = 35.0;     // Critical temperature threshold (°C)
+    const HUMIDITY_HIGH_THRESHOLD = 80.0; // High humidity threshold (%)
+
     let unitStatus = "NORMAL";
+    let isEnvironmentalCritical = false;
 
     if (gasLevel >= SPOILAGE_THRESHOLD) {
       unitStatus = "CRITICAL_SPOILAGE_DETECTED";
-    } else if (gasLevel >= 150) {
+      isEnvironmentalCritical = true;
+    } else if (temperature >= TEMP_HIGH_THRESHOLD) {
+      unitStatus = "CRITICAL_HIGH_TEMP";
+      isEnvironmentalCritical = true;
+    } else if (humidity >= HUMIDITY_HIGH_THRESHOLD) {
+      unitStatus = "CRITICAL_HIGH_HUMIDITY";
+      isEnvironmentalCritical = true;
+    } else if (gasLevel >= ELEVATED_GAS_THRESHOLD) {
       unitStatus = "WARNING_ELEVATED_GAS";
     }
 
@@ -77,6 +89,15 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Read current fan_status if already set by user
+    const { data: currentRecord } = await supabaseClient
+      .from('storage_telemetry')
+      .select('fan_status')
+      .eq('device_id', deviceId)
+      .maybeSingle();
+
+    const fanStatus = currentRecord?.fan_status ?? false;
+
     const { error } = await supabaseClient
       .from('storage_telemetry')
       .upsert({
@@ -85,15 +106,25 @@ serve(async (req: Request) => {
         current_humidity: humidity,
         gas_level: gasLevel,
         status: unitStatus,
-        last_updated: timestamp
-      });
+        last_updated: timestamp,
+        fan_status: fanStatus
+      }, { onConflict: 'device_id' });
 
     if (error) {
       console.error("Database insert error:", error);
-      return new Response('Internal Server Error', { status: 500 });
+      return new Response(JSON.stringify({ error: 'Internal Server Error' }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    return new Response('Telemetry processed successfully', { status: 200 });
+    return new Response(JSON.stringify({ 
+      message: 'Telemetry processed successfully',
+      fan_status: fanStatus 
+    }), { 
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error("Error processing telemetry:", error);

@@ -105,5 +105,9 @@
   "Select Language": "Select Language",
   "Choose your preferred language for AgroBridge.": "Choose your preferred language for AgroBridge.",
   "Continue": "Continue",
-  "No crops listed yet.": "No crops listed yet."
+  "No crops listed yet.": "No crops listed yet.",
+  "Storage Cooling Fan": "Storage Cooling Fan",
+  "Fan Running": "Fan Running",
+  "Fan Stopped": "Fan Stopped",
+  "Failed to update fan status": "Failed to update fan status"
 }
