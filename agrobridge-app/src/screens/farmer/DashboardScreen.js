@@ -24,6 +24,12 @@ export default function DashboardScreen({ navigation }) {
   const [linkDeviceIdInput, setLinkDeviceIdInput] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [hardwareRefreshTrigger, setHardwareRefreshTrigger] = useState(0);
+  
+  // Camera State
+  const [cameraImageUrl, setCameraImageUrl] = useState(null);
+  const [cameraUpdatedAt, setCameraUpdatedAt] = useState(null);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const { t } = useTranslation();
 
   // Bottom Sheet State
@@ -292,6 +298,10 @@ export default function DashboardScreen({ navigation }) {
             const riskPercentage = Math.min(Math.round((data.gas_level / 1500) * 100), 100);
             setSpoilageRisk(riskPercentage);
             setFanStatus(!!data.fan_status);
+            if (data.camera_image_url) {
+              setCameraImageUrl(data.camera_image_url);
+              setCameraUpdatedAt(data.camera_updated_at);
+            }
           }
 
           // Subscribe to real-time telemetry updates for this device
@@ -311,6 +321,12 @@ export default function DashboardScreen({ navigation }) {
                 }
                 if (payload.new.fan_status !== undefined) {
                   setFanStatus(!!payload.new.fan_status);
+                }
+                if (payload.new.camera_image_url !== undefined) {
+                  setCameraImageUrl(payload.new.camera_image_url);
+                }
+                if (payload.new.camera_updated_at !== undefined) {
+                  setCameraUpdatedAt(payload.new.camera_updated_at);
                 }
               }
             })
@@ -350,6 +366,22 @@ export default function DashboardScreen({ navigation }) {
     } finally {
       setIsTogglingFan(false);
     }
+  };
+
+  const getCameraTimeAgo = (timestamp) => {
+    if (!timestamp) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const diff = Math.max(0, now - Number(timestamp));
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
+  };
+
+  const handleRefreshCamera = () => {
+    if (!cameraImageUrl) return;
+    setIsCameraLoading(true);
+    setCameraUpdatedAt(Math.floor(Date.now() / 1000));
+    setTimeout(() => setIsCameraLoading(false), 800);
   };
 
   const handleLinkDevice = async () => {
@@ -517,6 +549,89 @@ export default function DashboardScreen({ navigation }) {
                       )}
                     </View>
                   </View>
+                </View>
+
+                {/* Card 5 (Storage Live Camera Monitor) */}
+                <View 
+                  className="w-full bg-white rounded-3xl p-5 mb-6 border border-slate-100/50 flex-col"
+                  style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.02, shadowRadius: 20, elevation: 3 }}
+                >
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View className="flex-row items-center flex-1">
+                      <View className="bg-indigo-50 p-2.5 rounded-full">
+                        <Ionicons name="videocam" size={20} color="#6366f1" />
+                      </View>
+                      <View className="ml-3 flex-1">
+                        <Text className="text-slate-800 font-bold text-base font-['PlusJakartaSans_700Bold']">
+                          {t('Storage Camera Feed')}
+                        </Text>
+                        <View className="flex-row items-center mt-0.5">
+                          <View className={`w-2 h-2 rounded-full mr-1.5 ${cameraImageUrl ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                          <Text className={`text-xs font-semibold ${cameraImageUrl ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {cameraImageUrl ? (cameraUpdatedAt ? `Live • ${getCameraTimeAgo(cameraUpdatedAt)}` : 'Live') : t('No Camera Stream')}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {cameraImageUrl && (
+                      <TouchableOpacity 
+                        onPress={handleRefreshCamera}
+                        disabled={isCameraLoading}
+                        className="p-2 bg-slate-50 rounded-xl border border-slate-100 active:bg-slate-100"
+                      >
+                        {isCameraLoading ? (
+                          <ActivityIndicator size="small" color="#6366f1" />
+                        ) : (
+                          <Ionicons name="refresh" size={18} color="#6366f1" />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {cameraImageUrl ? (
+                    <TouchableOpacity 
+                      activeOpacity={0.9} 
+                      onPress={() => setIsCameraModalOpen(true)}
+                      className="relative overflow-hidden rounded-2xl bg-slate-900 border border-slate-100"
+                    >
+                      <Image
+                        source={{ uri: `${cameraImageUrl}?t=${cameraUpdatedAt || 1}` }}
+                        style={{ width: '100%', height: 210 }}
+                        resizeMode="cover"
+                        onLoadStart={() => setIsCameraLoading(true)}
+                        onLoadEnd={() => setIsCameraLoading(false)}
+                      />
+                      
+                      {/* Live Badge Overlay */}
+                      <View className="absolute top-3 left-3 bg-black/60 px-2.5 py-1 rounded-full flex-row items-center backdrop-blur-md">
+                        <View className="w-2 h-2 rounded-full bg-red-500 mr-1.5" />
+                        <Text className="text-white text-[11px] font-bold tracking-wider">LIVE FEED</Text>
+                      </View>
+
+                      {/* Expand Icon Overlay */}
+                      <View className="absolute bottom-3 right-3 bg-black/60 p-2 rounded-xl backdrop-blur-md">
+                        <Ionicons name="expand" size={16} color="#ffffff" />
+                      </View>
+
+                      {/* Camera Loading Spinner */}
+                      {isCameraLoading && (
+                        <View className="absolute inset-0 bg-black/40 items-center justify-center">
+                          <ActivityIndicator size="large" color="#ffffff" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ) : (
+                    <View className="w-full h-40 bg-slate-50 border border-dashed border-slate-200 rounded-2xl items-center justify-center p-4">
+                      <Ionicons name="camera-outline" size={36} color="#94a3b8" />
+                      <Text className="text-slate-600 font-bold text-sm mt-2 font-['PlusJakartaSans_600SemiBold']">
+                        {t('Waiting for Camera Snapshot...')}
+                      </Text>
+                      <Text className="text-slate-400 text-xs text-center mt-1">
+                        {t('Ensure ESP32-CAM is powered and linked to device:')} {hardwareDeviceId}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
             ) : (
@@ -920,6 +1035,47 @@ export default function DashboardScreen({ navigation }) {
 
           </MotiView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Fullscreen Camera Modal */}
+      <Modal
+        visible={isCameraModalOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsCameraModalOpen(false)}
+      >
+        <SafeAreaView className="flex-1 bg-black/95 justify-between">
+          <View className="flex-row justify-between items-center px-5 pt-3">
+            <View className="flex-row items-center">
+              <View className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2" />
+              <Text className="text-white font-bold text-base font-['PlusJakartaSans_700Bold']">
+                {t('Storage Live View')} ({hardwareDeviceId})
+              </Text>
+            </View>
+            <TouchableOpacity 
+              onPress={() => setIsCameraModalOpen(false)}
+              className="p-2 bg-white/20 rounded-full"
+            >
+              <Ionicons name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+
+          <View className="flex-1 justify-center items-center px-2">
+            {cameraImageUrl && (
+              <Image
+                source={{ uri: `${cameraImageUrl}?t=${cameraUpdatedAt || 1}` }}
+                style={{ width: '100%', height: '80%', borderRadius: 16 }}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+
+          <View className="px-6 pb-6 items-center">
+            <Text className="text-slate-400 text-xs">
+              {cameraUpdatedAt ? `Snapshot timestamp: ${new Date(Number(cameraUpdatedAt) * 1000).toLocaleString()}` : ''}
+            </Text>
+          </View>
+        </SafeAreaView>
       </Modal>
     </>
   );

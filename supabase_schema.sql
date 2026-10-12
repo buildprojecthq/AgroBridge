@@ -32,8 +32,14 @@ CREATE TABLE IF NOT EXISTS public.storage_telemetry (
   gas_level INTEGER NOT NULL,
   status TEXT NOT NULL,
   last_updated BIGINT NOT NULL, -- Storing as unix timestamp matching the ESP32
-  fan_status BOOLEAN DEFAULT false
+  fan_status BOOLEAN DEFAULT false,
+  camera_image_url TEXT,
+  camera_updated_at BIGINT
 );
+
+-- Idempotent column additions for existing databases
+ALTER TABLE public.storage_telemetry ADD COLUMN IF NOT EXISTS camera_image_url TEXT;
+ALTER TABLE public.storage_telemetry ADD COLUMN IF NOT EXISTS camera_updated_at BIGINT;
 
 -- Enable RLS for telemetry (Assuming app users read this data)
 ALTER TABLE public.storage_telemetry ENABLE ROW LEVEL SECURITY;
@@ -231,4 +237,27 @@ ALTER TABLE public.mandi_prices ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Anyone can view mandi prices" 
 ON public.mandi_prices FOR SELECT 
 USING (true);
+
+-----------------------------------------------------------
+-- STORAGE BUCKETS (Warehouse Camera Snapshots)
+-----------------------------------------------------------
+-- Creates the public storage bucket for camera snapshots if it doesn't already exist
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('warehouse-snapshots', 'warehouse-snapshots', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Public read access to warehouse snapshots
+CREATE POLICY "Public Access to Warehouse Snapshots"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'warehouse-snapshots');
+
+-- Service role & Edge functions handle uploads securely.
+-- Optional authenticated insert policy for direct testing:
+CREATE POLICY "Allow snapshot uploads"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'warehouse-snapshots');
+
+CREATE POLICY "Allow snapshot updates"
+ON storage.objects FOR UPDATE
+USING (bucket_id = 'warehouse-snapshots');
 
