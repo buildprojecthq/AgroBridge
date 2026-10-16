@@ -20,3 +20,11 @@ Thumbs.db
 # IDE specific files
 .vscode/
 .idea/
+
+# Android build outputs & APKs
+*.apk
+*.aab
+**/android/.gradle/
+**/android/app/build/
+**/android/build/
+AgroBridge-release.apk
