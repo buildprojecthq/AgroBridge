@@ -24,7 +24,7 @@ import Toast from 'react-native-toast-message';
 import { toastConfig } from './src/components/CustomToast';
 
 // Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   let [fontsLoaded] = useFonts({
