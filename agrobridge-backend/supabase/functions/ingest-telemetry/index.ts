@@ -60,8 +60,8 @@ serve(async (req: Request) => {
     const { deviceId, temperature, humidity, gasLevel, timestamp } = body;
 
     // 5. Smart Spoilage & Auto-Ventilation Logic
-    const SPOILAGE_THRESHOLD = 1300;      // Critical gas threshold
-    const ELEVATED_GAS_THRESHOLD = 1200;  // Elevated warning threshold
+    const SPOILAGE_THRESHOLD = 800;       // Critical gas threshold (triggers fan at 800+)
+    const ELEVATED_GAS_THRESHOLD = 750;   // Elevated warning threshold
     const TEMP_HIGH_THRESHOLD = 35.0;     // Critical temperature threshold (°C)
     const HUMIDITY_HIGH_THRESHOLD = 80.0; // High humidity threshold (%)
 
@@ -89,14 +89,15 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Read current fan_status if already set by user
+    // Read current fan_status and camera fields
     const { data: currentRecord } = await supabaseClient
       .from('storage_telemetry')
-      .select('fan_status')
+      .select('fan_status, camera_image_url, camera_updated_at')
       .eq('device_id', deviceId)
       .maybeSingle();
 
-    const fanStatus = currentRecord?.fan_status ?? false;
+    // If critical condition detected, fan is automatically activated
+    const fanStatus = isEnvironmentalCritical ? true : (currentRecord?.fan_status ?? false);
 
     const { error } = await supabaseClient
       .from('storage_telemetry')
@@ -107,7 +108,9 @@ serve(async (req: Request) => {
         gas_level: gasLevel,
         status: unitStatus,
         last_updated: timestamp,
-        fan_status: fanStatus
+        fan_status: fanStatus,
+        camera_image_url: currentRecord?.camera_image_url ?? null,
+        camera_updated_at: currentRecord?.camera_updated_at ?? null
       }, { onConflict: 'device_id' });
 
     if (error) {

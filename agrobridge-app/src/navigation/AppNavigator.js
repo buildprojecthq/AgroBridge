@@ -102,9 +102,58 @@ export default function AppNavigator() {
       })
       .subscribe();
 
+    // 3) Global Notification Listeners for authenticated users
+    let lastSpoilageAlertTime = 0;
+    let isSpoilageAlertActive = false;
+
+    // Listen to storage telemetry for Spoilage / Gas alerts (Threshold: 800)
+    const telemetryAlertChannel = supabase
+      .channel('global:storage_telemetry_alerts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'storage_telemetry' }, payload => {
+        if (!payload.new) return;
+        
+        const gasLevel = payload.new.gas_level ?? 0;
+        const status = payload.new.status ?? '';
+        const isCritical = gasLevel >= 800 || status === 'CRITICAL_SPOILAGE_DETECTED';
+        const now = Date.now();
+
+        if (isCritical) {
+          // Send notification if not alerted recently (5-minute cooldown) or on first spike
+          if (!isSpoilageAlertActive || (now - lastSpoilageAlertTime > 5 * 60 * 1000)) {
+            lastSpoilageAlertTime = now;
+            isSpoilageAlertActive = true;
+
+            const title = '🚨 Critical Spoilage Alert!';
+            const body = `Warehouse gas level reached ${gasLevel} PPM (Safe < 800). Auto-exhaust fan triggered!`;
+
+            Toast.show({
+              type: 'error',
+              text1: title,
+              text2: body,
+              position: 'top',
+              topOffset: 60,
+              visibilityTime: 6000,
+            });
+
+            scheduleLocalNotification(title, body, {
+              type: 'spoilage_alert',
+              deviceId: payload.new.device_id,
+              gasLevel: gasLevel
+            });
+          }
+        } else {
+          // Reset alert state when gas drops back below threshold (< 750)
+          if (gasLevel < 750) {
+            isSpoilageAlertActive = false;
+          }
+        }
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(telemetryAlertChannel);
     };
   }, [user, userRole]);
 

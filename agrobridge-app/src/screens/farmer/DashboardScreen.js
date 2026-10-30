@@ -17,6 +17,7 @@ export default function DashboardScreen({ navigation }) {
   const [temperature, setTemperature] = useState(30.0);
   const [humidity, setHumidity] = useState(68);
   const [spoilageRisk, setSpoilageRisk] = useState(2);
+  const [gasLevel, setGasLevel] = useState(600);
   const [fanStatus, setFanStatus] = useState(false);
   const [isTogglingFan, setIsTogglingFan] = useState(false);
   const [hasHardware, setHasHardware] = useState(false);
@@ -295,7 +296,10 @@ export default function DashboardScreen({ navigation }) {
           if (data) {
             setTemperature(data.current_temperature);
             setHumidity(data.current_humidity);
-            const riskPercentage = Math.min(Math.round((data.gas_level / 1500) * 100), 100);
+            const currentGas = data.gas_level ?? 600;
+            setGasLevel(currentGas);
+            // Threshold is 800: clean air (~500-600) is safe, 800+ is 100% critical
+            const riskPercentage = Math.min(Math.max(Math.round(((currentGas - 500) / (800 - 500)) * 100), 5), 100);
             setSpoilageRisk(riskPercentage);
             setFanStatus(!!data.fan_status);
             if (data.camera_image_url) {
@@ -317,7 +321,10 @@ export default function DashboardScreen({ navigation }) {
                   setHumidity(payload.new.current_humidity);
                 }
                 if (payload.new.gas_level !== undefined) {
-                  setSpoilageRisk(Math.min(Math.round((payload.new.gas_level / 1500) * 100), 100));
+                  const currentGas = payload.new.gas_level;
+                  setGasLevel(currentGas);
+                  const riskPercentage = Math.min(Math.max(Math.round(((currentGas - 500) / (800 - 500)) * 100), 5), 100);
+                  setSpoilageRisk(riskPercentage);
                 }
                 if (payload.new.fan_status !== undefined) {
                   setFanStatus(!!payload.new.fan_status);
@@ -407,7 +414,7 @@ export default function DashboardScreen({ navigation }) {
     }
   };
 
-  const isSpoilageDetected = spoilageRisk >= 85; // Flag as dangerous if gas >= 1300 (85%+)
+  const isSpoilageDetected = gasLevel >= 800 || spoilageRisk >= 100; // Flag as dangerous if gas >= 800
 
   return (
     <>
@@ -497,16 +504,18 @@ export default function DashboardScreen({ navigation }) {
                   </View>
                   
                   {/* Green-to-Red Gradient Progress Bar */}
-                  <View className="h-2 w-full bg-slate-100 rounded-full mt-1 overflow-hidden">
+                  <View className="h-2.5 w-full bg-slate-100 rounded-full mt-1 overflow-hidden">
                     <LinearGradient
                       colors={['#10b981', '#f59e0b', '#ef4444']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
-                      style={{ height: '100%', width: `${spoilageRisk * 10}%`, borderRadius: 9999 }}
+                      style={{ height: '100%', width: `${Math.min(spoilageRisk, 100)}%`, borderRadius: 9999 }}
                     />
                   </View>
-                  {isSpoilageDetected && (
-                    <Text className="text-red-500 text-xs font-bold mt-2 text-right">⚠️ CRITICAL LEVELS</Text>
+                  {isSpoilageDetected ? (
+                    <Text className="text-red-500 text-xs font-bold mt-2 text-right">⚠️ CRITICAL SPOILAGE DETECTED ({gasLevel} PPM)</Text>
+                  ) : (
+                    <Text className="text-slate-500 text-xs mt-1 text-right">Reading: {gasLevel} PPM (Safe &lt; 800)</Text>
                   )}
                 </View>
 
@@ -758,7 +767,7 @@ export default function DashboardScreen({ navigation }) {
           {hasHardware && isSpoilageDetected && (
             <TouchableOpacity 
               className="bg-red-500/20 border border-red-500/50 py-3 rounded-xl mt-4 mx-4 mb-6 items-center"
-              onPress={() => alert('Exhaust command sent to hardware!')}
+              onPress={() => handleToggleFan(true)}
             >
               <Text className="text-red-600 text-base font-bold">{t('ACTIVATE EXHAUST FANS')}</Text>
             </TouchableOpacity>

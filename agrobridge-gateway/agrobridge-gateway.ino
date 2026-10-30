@@ -9,8 +9,8 @@
 // ==========================================
 // 1. CONFIGURATION
 // ==========================================
-const char *WIFI_SSID = "Thejas";
-const char *WIFI_PASSWORD = "9900449281";
+const char *WIFI_SSID = "Ramamurthy's F15";
+const char *WIFI_PASSWORD = "rama@12321";
 
 // Your Supabase Edge Function URL for ingest-telemetry
 const char *CLOUD_FUNCTION_URL =
@@ -50,8 +50,7 @@ LiquidCrystal lcd(LCD_RS_PIN, LCD_E_PIN, LCD_D4_PIN, LCD_D5_PIN, LCD_D6_PIN,
 // ==========================================
 // 3. SAFETY AUTOMATION THRESHOLDS
 // ==========================================
-#define GAS_CRITICAL_THRESHOLD                                                 \
-  1300 // Critical gas/spoilage threshold (normal is 700-1200)
+#define GAS_CRITICAL_THRESHOLD 800 // Critical gas/spoilage threshold (triggers fan at 800+)
 #define TEMP_HIGH_THRESHOLD 35.0     // Critical temperature limit in °C
 #define HUMIDITY_HIGH_THRESHOLD 80.0 // Critical humidity limit in %
 
