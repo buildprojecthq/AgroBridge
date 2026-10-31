@@ -60,8 +60,8 @@ serve(async (req: Request) => {
     const { deviceId, temperature, humidity, gasLevel, timestamp } = body;
 
     // 5. Smart Spoilage & Auto-Ventilation Logic
-    const SPOILAGE_THRESHOLD = 800;       // Critical gas threshold (triggers fan at 800+)
-    const ELEVATED_GAS_THRESHOLD = 750;   // Elevated warning threshold
+    const SPOILAGE_THRESHOLD = 1000;      // Critical gas threshold (triggers fan at 1000+)
+    const ELEVATED_GAS_THRESHOLD = 900;   // Elevated warning threshold
     const TEMP_HIGH_THRESHOLD = 35.0;     // Critical temperature threshold (°C)
     const HUMIDITY_HIGH_THRESHOLD = 80.0; // High humidity threshold (%)
 

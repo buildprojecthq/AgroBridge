@@ -106,7 +106,7 @@ export default function AppNavigator() {
     let lastSpoilageAlertTime = 0;
     let isSpoilageAlertActive = false;
 
-    // Listen to storage telemetry for Spoilage / Gas alerts (Threshold: 800)
+    // Listen to storage telemetry for Spoilage / Gas alerts (Threshold: 1000)
     const telemetryAlertChannel = supabase
       .channel('global:storage_telemetry_alerts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'storage_telemetry' }, payload => {
@@ -114,7 +114,7 @@ export default function AppNavigator() {
         
         const gasLevel = payload.new.gas_level ?? 0;
         const status = payload.new.status ?? '';
-        const isCritical = gasLevel >= 800 || status === 'CRITICAL_SPOILAGE_DETECTED';
+        const isCritical = gasLevel >= 1000 || status === 'CRITICAL_SPOILAGE_DETECTED';
         const now = Date.now();
 
         if (isCritical) {
@@ -124,7 +124,7 @@ export default function AppNavigator() {
             isSpoilageAlertActive = true;
 
             const title = '🚨 Critical Spoilage Alert!';
-            const body = `Warehouse gas level reached ${gasLevel} PPM (Safe < 800). Auto-exhaust fan triggered!`;
+            const body = `Warehouse gas level reached ${gasLevel} PPM (Safe < 1000). Auto-exhaust fan triggered!`;
 
             Toast.show({
               type: 'error',
@@ -142,8 +142,8 @@ export default function AppNavigator() {
             });
           }
         } else {
-          // Reset alert state when gas drops back below threshold (< 750)
-          if (gasLevel < 750) {
+          // Reset alert state when gas drops back below threshold (< 900)
+          if (gasLevel < 900) {
             isSpoilageAlertActive = false;
           }
         }

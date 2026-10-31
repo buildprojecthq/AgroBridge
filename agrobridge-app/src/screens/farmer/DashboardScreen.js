@@ -298,8 +298,8 @@ export default function DashboardScreen({ navigation }) {
             setHumidity(data.current_humidity);
             const currentGas = data.gas_level ?? 600;
             setGasLevel(currentGas);
-            // Threshold is 800: clean air (~500-600) is safe, 800+ is 100% critical
-            const riskPercentage = Math.min(Math.max(Math.round(((currentGas - 500) / (800 - 500)) * 100), 5), 100);
+            // Threshold is 1000: clean air (~500-600) is safe, 1000+ is 100% critical
+            const riskPercentage = Math.min(Math.max(Math.round(((currentGas - 500) / (1000 - 500)) * 100), 5), 100);
             setSpoilageRisk(riskPercentage);
             setFanStatus(!!data.fan_status);
             if (data.camera_image_url) {
@@ -323,7 +323,7 @@ export default function DashboardScreen({ navigation }) {
                 if (payload.new.gas_level !== undefined) {
                   const currentGas = payload.new.gas_level;
                   setGasLevel(currentGas);
-                  const riskPercentage = Math.min(Math.max(Math.round(((currentGas - 500) / (800 - 500)) * 100), 5), 100);
+                  const riskPercentage = Math.min(Math.max(Math.round(((currentGas - 500) / (1000 - 500)) * 100), 5), 100);
                   setSpoilageRisk(riskPercentage);
                 }
                 if (payload.new.fan_status !== undefined) {
@@ -414,7 +414,7 @@ export default function DashboardScreen({ navigation }) {
     }
   };
 
-  const isSpoilageDetected = gasLevel >= 800 || spoilageRisk >= 100; // Flag as dangerous if gas >= 800
+  const isSpoilageDetected = gasLevel >= 1000 || spoilageRisk >= 100; // Flag as dangerous if gas >= 1000
 
   return (
     <>
@@ -515,7 +515,7 @@ export default function DashboardScreen({ navigation }) {
                   {isSpoilageDetected ? (
                     <Text className="text-red-500 text-xs font-bold mt-2 text-right">⚠️ CRITICAL SPOILAGE DETECTED ({gasLevel} PPM)</Text>
                   ) : (
-                    <Text className="text-slate-500 text-xs mt-1 text-right">Reading: {gasLevel} PPM (Safe &lt; 800)</Text>
+                    <Text className="text-slate-500 text-xs mt-1 text-right">Reading: {gasLevel} PPM (Safe &lt; 1000)</Text>
                   )}
                 </View>
 
