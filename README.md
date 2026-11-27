@@ -91,17 +91,20 @@ flowchart TB
 
 ## 3. Itemized Hardware Bill of Materials (BOM)
 
-|  #  | Component Description                                      |  Qty  | Role / Specifications                                                                         |
-| :-: | :--------------------------------------------------------- | :---: | :-------------------------------------------------------------------------------------------- |
-|  1  | **ESP32 DevKit Microcontroller**                           |   1   | Main IoT telemetry gateway posting signed JSON every 10 s and syncing fan state               |
-|  2  | **AI-Thinker ESP32-CAM Module (`OV2640`)**                 |   1   | Camera node capturing SVGA (`800×600`) / QVGA JPEG warehouse snapshots                        |
-|  3  | **DHT22 (`AM2302`) Temperature & Humidity Sensor**         |   1   | Digital sensor mounted inside the crop chamber (`GPIO 4`)                                     |
-|  4  | **MQ-Series Gas Sensor Module**                            |   1   | Analog spoilage gas sensor connected to ESP32 ADC1 (`GPIO 34`, critical threshold ≥ 1000 PPM) |
-|  5  | **1602 (`16×2`) Character LCD Display + Contrast Trimpot** |   1   | Front-panel 4-bit parallel readout showing `T`, `H`, `G`, `FAN`, and `A`/`M` mode             |
-|  6  | **1-Channel Relay Module (Active-LOW)**                    |   1   | Controls the enclosure cooling fan (`GPIO 18`; `LOW` = ON, `HIGH` = OFF)                      |
-|  7  | **DC Exhaust / Cooling Fan**                               |   1   | Panel-mounted ventilation fan triggered automatically on threshold breach or via app          |
-|  8  | **Dual-Compartment Wooden Storage Enclosure**              |   1   | Latched wooden prototype box separating upper electronics bay from lower crop chamber         |
-|  9  | **Solderless Breadboard & Jumper Wire Harness**            | 1 set | Signal and power distribution across ESP32, LCD, relay, and chamber sensors                   |
+|  #  | Component Description                                      |  Qty  | Approx. Price (INR) | Role / Specifications                                                                         |
+| :-: | :--------------------------------------------------------- | :---: | :-----------------: | :-------------------------------------------------------------------------------------------- |
+|  1  | **ESP32 DevKit Microcontroller**                           |   1   |        ₹449         | Main IoT telemetry gateway posting signed JSON every 10 s and syncing fan state               |
+|  2  | **AI-Thinker ESP32-CAM Module (`OV2640`)**                 |   1   |        ₹779         | Camera node capturing SVGA (`800×600`) / QVGA JPEG warehouse snapshots                        |
+|  3  | **DHT22 (`AM2302`) Temperature & Humidity Sensor**         |   1   |        ₹119         | Digital sensor mounted inside the crop chamber (`GPIO 4`)                                     |
+|  4  | **MQ-Series Gas Sensor Module**                            |   1   |        ₹150         | Analog spoilage gas sensor connected to ESP32 ADC1 (`GPIO 34`, critical threshold ≥ 1000 PPM) |
+|  5  | **1602 (`16×2`) Character LCD Display + Contrast Trimpot** |   1   |        ₹115         | Front-panel 4-bit parallel readout showing `T`, `H`, `G`, `FAN`, and `A`/`M` mode             |
+|  6  | **1-Channel Relay Module (Active-LOW)**                    |   1   |         ₹55         | Controls the enclosure cooling fan (`GPIO 18`; `LOW` = ON, `HIGH` = OFF)                      |
+|  7  | **DC Exhaust / Cooling Fan**                               |   1   |        ₹120         | Panel-mounted ventilation fan triggered automatically on threshold breach or via app          |
+|  8  | **Dual-Compartment Wooden Storage Enclosure**              |   1   |        ₹450         | Custom latched wooden box separating upper electronics bay from lower crop chamber            |
+|  9  | **Solderless Breadboard & Jumper Wire Harness**            | 1 set |        ₹130         | Signal and power distribution across ESP32, LCD, relay, and chamber sensors                   |
+|     | **Estimated Total Prototype Cost**                         |       |     **₹2,367**      |                                                                                               |
+
+> **Note:** Prices above are approximate Indian market estimates (in INR) for off-the-shelf electronics modules and local wooden enclosure fabrication; actual costs vary by vendor and batch.
 
 ---
 
